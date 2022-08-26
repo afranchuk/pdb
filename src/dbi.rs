@@ -29,7 +29,6 @@ use crate::{FallibleIterator, SectionCharacteristics};
 /// let mut pdb = pdb2::PDB::open(file)?;
 ///
 /// let dbi = pdb.debug_information()?;
-
 ///
 /// # let mut count: usize = 0;
 /// let mut modules = dbi.modules()?;
