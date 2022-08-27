@@ -259,6 +259,8 @@ pub enum SymbolData<'t> {
     BasePointerRelative(BasePointerRelativeSymbol<'t>),
     /// Extra frame and proc information.
     FrameProcedure(FrameProcedureSymbol),
+    /// Indirect call site information.
+    CallSiteInfo(CallSiteInfoSymbol),
 }
 
 impl<'t> SymbolData<'t> {
@@ -308,7 +310,8 @@ impl<'t> SymbolData<'t> {
             | Self::DefRangeFramePointerRelativeFullScope(_)
             | Self::DefRangeSubFieldRegister(_)
             | Self::DefRangeRegisterRelative(_)
-            | Self::FrameProcedure(_) => None,
+            | Self::FrameProcedure(_)
+            | Self::CallSiteInfo(_) => None,
         }
     }
 }
@@ -386,6 +389,7 @@ impl<'t> TryFromCtx<'t> for SymbolData<'t> {
                 SymbolData::BasePointerRelative(buf.parse_with(kind)?)
             }
             S_FRAMEPROC => SymbolData::FrameProcedure(buf.parse_with(kind)?),
+            S_CALLSITEINFO => SymbolData::CallSiteInfo(buf.parse_with(kind)?),
             other => return Err(Error::UnimplementedSymbolKind(other)),
         };
 
@@ -2380,6 +2384,33 @@ impl TryFromCtx<'_, SymbolKind> for FrameProcedureSymbol {
             exception_handler_offset: buf.parse()?,
             flags: buf.parse_with(LE)?,
         };
+
+        Ok((symbol, buf.pos()))
+    }
+}
+
+// https://github.com/Microsoft/microsoft-pdb/blob/082c5290e5aff028ae84e43affa8be717aa7af73/include/cvinfo.h#L4491
+/// Indirect call site information
+///
+/// Symbol type `S_CALLSITEINFO`
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct CallSiteInfoSymbol {
+    /// offset of call site
+    pub offset: PdbInternalSectionOffset,
+    /// type index describing function signature
+    pub type_index: TypeIndex,
+}
+
+impl TryFromCtx<'_, SymbolKind> for CallSiteInfoSymbol {
+    type Error = Error;
+
+    fn try_from_ctx(this: &'_ [u8], _kind: SymbolKind) -> Result<(Self, usize)> {
+        let mut buf = ParseBuffer::from(this);
+
+        let offset: PdbInternalSectionOffset = buf.parse()?;
+        let _padding = buf.parse::<u16>()?;
+        let type_index: TypeIndex = buf.parse()?;
+        let symbol = Self { offset, type_index };
 
         Ok((symbol, buf.pos()))
     }
