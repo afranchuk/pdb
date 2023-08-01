@@ -1,5 +1,7 @@
 use std::ffi::OsStr;
 
+use pdb2 as pdb;
+
 fn dump_stream_names(filename: &OsStr) -> pdb::Result<()> {
     let file = std::fs::File::open(filename)?;
     let mut pdb = pdb::PDB::open(file)?;

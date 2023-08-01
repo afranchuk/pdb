@@ -476,9 +476,9 @@ fn binary_search_by_rva<R: AddrRange>(frames: &[R], rva: PdbInternalRva) -> usiz
 /// # Example
 ///
 /// ```rust
-/// # use pdb::{PDB, Rva, FallibleIterator};
+/// # use pdb2::{PDB, Rva, FallibleIterator};
 /// #
-/// # fn test() -> pdb::Result<()> {
+/// # fn test() -> pdb2::Result<()> {
 /// # let source = std::fs::File::open("fixtures/self/foo.pdb")?;
 /// let mut pdb = PDB::open(source)?;
 ///

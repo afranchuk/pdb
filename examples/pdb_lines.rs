@@ -1,6 +1,8 @@
 use std::env;
 use std::io::Write;
 
+use pdb2 as pdb;
+
 use getopts::Options;
 
 use pdb::{FallibleIterator, SymbolData, PDB};

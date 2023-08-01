@@ -355,18 +355,18 @@ impl FusedIterator for PdbInternalRvaRangeIter<'_> {}
 /// # Example
 ///
 /// ```rust
-/// # use pdb::{Rva, FallibleIterator};
+/// # use pdb2::{Rva, FallibleIterator};
 /// #
-/// # fn test() -> pdb::Result<()> {
+/// # fn test() -> pdb2::Result<()> {
 /// # let source = std::fs::File::open("fixtures/self/foo.pdb")?;
-/// let mut pdb = pdb::PDB::open(source)?;
+/// let mut pdb = pdb2::PDB::open(source)?;
 ///
 /// // Compute the address map once and reuse it
 /// let address_map = pdb.address_map()?;
 ///
 /// # let symbol_table = pdb.global_symbols()?;
 /// # let symbol = symbol_table.iter().next()?.unwrap();
-/// # match symbol.parse() { Ok(pdb::SymbolData::Public(pubsym)) => {
+/// # match symbol.parse() { Ok(pdb2::SymbolData::Public(pubsym)) => {
 /// // Obtain some section offset, eg from a symbol, and convert it
 /// match pubsym.offset.to_rva(&address_map) {
 ///     Some(rva) => {

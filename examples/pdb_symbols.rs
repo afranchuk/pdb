@@ -1,5 +1,7 @@
 use std::env;
 
+use pdb2 as pdb;
+
 use getopts::Options;
 use pdb::{FallibleIterator, PdbInternalSectionOffset};
 

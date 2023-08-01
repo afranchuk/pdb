@@ -1,5 +1,7 @@
 use std::fs::File;
 
+use pdb2 as pdb;
+
 use pdb::{FallibleIterator, Result, PDB};
 
 #[test]

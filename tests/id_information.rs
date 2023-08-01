@@ -1,5 +1,7 @@
 //! Tests that IdInformation works on files where the IPI is missing (empty stream).
 
+use pdb2 as pdb;
+
 use pdb::{FallibleIterator, IdIndex, PDB};
 
 fn open_file() -> std::fs::File {

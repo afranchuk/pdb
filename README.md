@@ -1,7 +1,10 @@
-`pdb`
+`pdb2`
 ===
 
-[![](https://img.shields.io/crates/v/pdb.svg)](https://crates.io/crates/pdb) [![](https://docs.rs/pdb/badge.svg)](https://docs.rs/pdb/) ![Build Status](https://github.com/willglynn/pdb/actions/workflows/ci.yml/badge.svg)
+This repository is forked from [willglynn/pdb](https://github.com/willglynn/pdb) and published to
+as the `pdb2` crate.
+
+[![](https://img.shields.io/crates/v/pdb2.svg)](https://crates.io/crates/pdb2) [![](https://docs.rs/pdb2/badge.svg)](https://docs.rs/pdb2/) ![Build Status](https://github.com/afranchuk/pdb2/actions/workflows/ci.yml/badge.svg)
 
 This is a Rust library that parses Microsoft PDB (Program Database) files.
 These files contain debugging information produced by most compilers that
@@ -14,7 +17,7 @@ support for debugging 16-bit executables, COBOL user-defined types, and myriad
 other features. `pdb` does not understand everything about the PDB format,
 but it does cover enough to be useful for typical programs compiled today.
 
-[Documentation on docs.rs](https://docs.rs/pdb/).
+[Documentation on docs.rs](https://docs.rs/pdb2/).
 
 Design
 ---

@@ -1,3 +1,5 @@
+use pdb2 as pdb;
+
 #[test]
 fn pdb_info() {
     let file = std::fs::File::open("fixtures/self/foo.pdb").expect("opening file");

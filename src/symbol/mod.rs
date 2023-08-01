@@ -1508,11 +1508,11 @@ impl<'t> TryFromCtx<'t, SymbolKind> for SeparatedCodeSymbol {
 /// # Example
 ///
 /// ```
-/// # use pdb::FallibleIterator;
+/// # use pdb2::FallibleIterator;
 /// #
-/// # fn test() -> pdb::Result<usize> {
+/// # fn test() -> pdb2::Result<usize> {
 /// let file = std::fs::File::open("fixtures/self/foo.pdb")?;
-/// let mut pdb = pdb::PDB::open(file)?;
+/// let mut pdb = pdb2::PDB::open(file)?;
 ///
 /// let symbol_table = pdb.global_symbols()?;
 /// let address_map = pdb.address_map()?;
@@ -1521,7 +1521,7 @@ impl<'t> TryFromCtx<'t, SymbolKind> for SeparatedCodeSymbol {
 /// let mut symbols = symbol_table.iter();
 /// while let Some(symbol) = symbols.next()? {
 ///     match symbol.parse() {
-///         Ok(pdb::SymbolData::Public(data)) if data.function => {
+///         Ok(pdb2::SymbolData::Public(data)) if data.function => {
 ///             // we found the location of a function!
 ///             let rva = data.offset.to_rva(&address_map).unwrap_or_default();
 ///             println!("{} is {}", rva, data.name);

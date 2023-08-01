@@ -83,11 +83,11 @@ impl<'s> PDBInformation<'s> {
     /// # Example
     ///
     /// ```
-    /// # use pdb::FallibleIterator;
+    /// # use pdb2::FallibleIterator;
     /// #
-    /// # fn test() -> pdb::Result<()> {
+    /// # fn test() -> pdb2::Result<()> {
     /// let file = std::fs::File::open("fixtures/self/foo.pdb")?;
-    /// let mut pdb = pdb::PDB::open(file)?;
+    /// let mut pdb = pdb2::PDB::open(file)?;
     /// let info = pdb.pdb_information()?;
     /// let names = info.stream_names()?;
     /// let mut v: Vec<_> = names.iter().map(|n| n.name.to_string()).collect();

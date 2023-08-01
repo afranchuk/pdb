@@ -18,7 +18,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "pdb"
+name = "pdb2"
 version = "0.8.0"
 dependencies = [
  "fallible-iterator",

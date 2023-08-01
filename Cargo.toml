@@ -1,9 +1,9 @@
 [package]
-name = "pdb"
+name = "pdb2"
 version = "0.8.0"
 description = "A parser for Microsoft PDB (Program Database) debugging information"
-repository = "https://github.com/willglynn/pdb"
-authors = ["Jan Michael Auer <mail@jauer.org>", "Will Glynn <will@willglynn.com>"]
+repository = "https://github.com/afranchuk/pdb"
+authors = ["Jan Michael Auer <mail@jauer.org>", "Will Glynn <will@willglynn.com>", "Alex Franchuk <alex.franchuk@gmail.com>"]
 readme = "README.md"
 license = "MIT OR Apache-2.0"
 edition = "2018"
@@ -25,4 +25,3 @@ getopts = "0.2.21"
 pre-release-commit-message = "Release {{version}}"
 tag-name = "{{version}}"
 tag-message = "Release {{version}}"
-dev-version = false

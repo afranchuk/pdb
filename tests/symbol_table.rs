@@ -1,5 +1,7 @@
 use std::collections::hash_map::{Entry, HashMap};
 
+use pdb2 as pdb;
+
 use pdb::FallibleIterator;
 
 fn setup<F>(func: F)

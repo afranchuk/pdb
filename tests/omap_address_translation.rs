@@ -1,3 +1,5 @@
+use pdb2 as pdb;
+
 use pdb::{FallibleIterator, PdbInternalRva, PdbInternalSectionOffset, Rva};
 
 // This test is intended to cover OMAP address translation:

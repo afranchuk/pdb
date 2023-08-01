@@ -206,11 +206,11 @@ impl<'s, S: Source<'s> + 's> PDB<'s, S> {
     /// # Example
     ///
     /// ```
-    /// # use pdb::FallibleIterator;
+    /// # use pdb2::FallibleIterator;
     /// #
-    /// # fn test() -> pdb::Result<()> {
+    /// # fn test() -> pdb2::Result<()> {
     /// let file = std::fs::File::open("fixtures/self/foo.pdb")?;
-    /// let mut pdb = pdb::PDB::open(file)?;
+    /// let mut pdb = pdb2::PDB::open(file)?;
     /// let dbi = pdb.debug_information()?;
     /// let mut modules = dbi.modules()?;
     /// if let Some(module) = modules.next()? {
@@ -282,9 +282,9 @@ impl<'s, S: Source<'s> + 's> PDB<'s, S> {
     /// # Example
     ///
     /// ```rust
-    /// # use pdb::{PDB, Rva, FallibleIterator};
+    /// # use pdb2::{PDB, Rva, FallibleIterator};
     /// #
-    /// # fn test() -> pdb::Result<()> {
+    /// # fn test() -> pdb2::Result<()> {
     /// # let source = std::fs::File::open("fixtures/self/foo.pdb")?;
     /// let mut pdb = PDB::open(source)?;
     ///
@@ -365,18 +365,18 @@ impl<'s, S: Source<'s> + 's> PDB<'s, S> {
     /// # Example
     ///
     /// ```rust
-    /// # use pdb::{Rva, FallibleIterator};
+    /// # use pdb2::{Rva, FallibleIterator};
     /// #
-    /// # fn test() -> pdb::Result<()> {
+    /// # fn test() -> pdb2::Result<()> {
     /// # let source = std::fs::File::open("fixtures/self/foo.pdb")?;
-    /// let mut pdb = pdb::PDB::open(source)?;
+    /// let mut pdb = pdb2::PDB::open(source)?;
     ///
     /// // Compute the address map once and reuse it
     /// let address_map = pdb.address_map()?;
     ///
     /// # let symbol_table = pdb.global_symbols()?;
     /// # let symbol = symbol_table.iter().next()?.unwrap();
-    /// # match symbol.parse() { Ok(pdb::SymbolData::Public(pubsym)) => {
+    /// # match symbol.parse() { Ok(pdb2::SymbolData::Public(pubsym)) => {
     /// // Obtain some section offset, eg from a symbol, and convert it
     /// match pubsym.offset.to_rva(&address_map) {
     ///     Some(rva) => {
@@ -429,9 +429,9 @@ impl<'s, S: Source<'s> + 's> PDB<'s, S> {
     /// # Example
     ///
     /// ```
-    /// # use pdb::{FallibleIterator, StringRef, PDB};
+    /// # use pdb2::{FallibleIterator, StringRef, PDB};
     /// #
-    /// # fn test() -> pdb::Result<()> {
+    /// # fn test() -> pdb2::Result<()> {
     /// # let file = std::fs::File::open("fixtures/self/foo.pdb")?;
     /// let mut pdb = PDB::open(file)?;
     /// let strings = pdb.string_table()?;
@@ -470,11 +470,11 @@ impl<'s, S: Source<'s> + 's> PDB<'s, S> {
     /// # Example
     ///
     /// ```
-    /// # fn test() -> pdb::Result<()> {
+    /// # fn test() -> pdb2::Result<()> {
     /// let file = std::fs::File::open("fixtures/self/foo.pdb")?;
-    /// let mut pdb = pdb::PDB::open(file)?;
+    /// let mut pdb = pdb2::PDB::open(file)?;
     /// // This is the index of the "mystream" stream that was added using pdbstr.exe.
-    /// let s = pdb.raw_stream(pdb::StreamIndex(208))?.expect("stream exists");
+    /// let s = pdb.raw_stream(pdb2::StreamIndex(208))?.expect("stream exists");
     /// assert_eq!(s.as_slice(), b"hello world\n");
     /// # Ok(())
     /// # }

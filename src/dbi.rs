@@ -22,11 +22,11 @@ use crate::{FallibleIterator, SectionCharacteristics};
 /// # Example
 ///
 /// ```
-/// # use pdb::FallibleIterator;
+/// # use pdb2::FallibleIterator;
 /// #
-/// # fn test() -> pdb::Result<usize> {
+/// # fn test() -> pdb2::Result<usize> {
 /// let file = std::fs::File::open("fixtures/self/foo.pdb")?;
-/// let mut pdb = pdb::PDB::open(file)?;
+/// let mut pdb = pdb2::PDB::open(file)?;
 ///
 /// let dbi = pdb.debug_information()?;
 

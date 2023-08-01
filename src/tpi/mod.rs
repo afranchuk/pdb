@@ -59,11 +59,11 @@ pub use self::primitive::{Indirection, PrimitiveKind, PrimitiveType};
 /// Iterating over the types while building a `TypeFinder`:
 ///
 /// ```
-/// # use pdb::FallibleIterator;
+/// # use pdb2::FallibleIterator;
 /// #
-/// # fn test() -> pdb::Result<usize> {
+/// # fn test() -> pdb2::Result<usize> {
 /// # let file = std::fs::File::open("fixtures/self/foo.pdb")?;
-/// # let mut pdb = pdb::PDB::open(file)?;
+/// # let mut pdb = pdb2::PDB::open(file)?;
 ///
 /// let type_information = pdb.type_information()?;
 /// let mut type_finder = type_information.finder();
@@ -77,17 +77,17 @@ pub use self::primitive::{Indirection, PrimitiveKind, PrimitiveType};
 ///
 ///     // parse the type record
 ///     match typ.parse() {
-///         Ok(pdb::TypeData::Class(pdb::ClassType {name, properties, fields: Some(fields), ..})) => {
+///         Ok(pdb2::TypeData::Class(pdb2::ClassType {name, properties, fields: Some(fields), ..})) => {
 ///             // this Type describes a class-like type with fields
 ///             println!("type {} is a class named {}", typ.index(), name);
 ///
 ///             // `fields` is a TypeIndex which refers to a FieldList
 ///             // To find information about the fields, find and parse that Type
 ///             match type_finder.find(fields)?.parse()? {
-///                 pdb::TypeData::FieldList(list) => {
+///                 pdb2::TypeData::FieldList(list) => {
 ///                     // `fields` is a Vec<TypeData>
 ///                     for field in list.fields {
-///                         if let pdb::TypeData::Member(member) = field {
+///                         if let pdb2::TypeData::Member(member) = field {
 ///                             // follow `member.field_type` as desired
 ///                             println!("  - field {} at offset {:x}", member.name, member.offset);
 ///                         } else {
@@ -107,7 +107,7 @@ pub use self::primitive::{Indirection, PrimitiveKind, PrimitiveType};
 ///         Ok(_) => {
 ///             // ignore everything that's not a class-like type
 ///         },
-///         Err(pdb::Error::UnimplementedTypeKind(_)) => {
+///         Err(pdb2::Error::UnimplementedTypeKind(_)) => {
 ///             // found an unhandled type record
 ///             // this probably isn't fatal in most use cases
 ///         },

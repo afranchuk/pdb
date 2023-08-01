@@ -1,6 +1,8 @@
 use std::collections::BTreeSet;
 use std::fmt;
 
+use pdb2 as pdb;
+
 use pdb::FallibleIterator;
 
 type TypeSet = BTreeSet<pdb::TypeIndex>;
