@@ -14,7 +14,7 @@ The PDB format is not documented per sé, but Microsoft has [published
 information](https://github.com/Microsoft/microsoft-pdb) in the form of C++
 code relating to its use. The PDB format is full of... history, including
 support for debugging 16-bit executables, COBOL user-defined types, and myriad
-other features. `pdb` does not understand everything about the PDB format,
+other features. `pdb2` does not understand everything about the PDB format,
 but it does cover enough to be useful for typical programs compiled today.
 
 [Documentation on docs.rs](https://docs.rs/pdb2/).
@@ -22,15 +22,15 @@ but it does cover enough to be useful for typical programs compiled today.
 Design
 ---
 
-`pdb`'s design objectives are similar to
+`pdb2`'s design objectives are similar to
 [`gimli`](https://github.com/gimli-rs/gimli):
 
-* `pdb` works with the original data as it's formatted on-disk as long as
+* `pdb2` works with the original data as it's formatted on-disk as long as
   possible.
 
-* `pdb` parses only what you ask.
+* `pdb2` parses only what you ask.
 
-* `pdb` can read PDBs anywhere. There's no dependency on Windows, on the
+* `pdb2` can read PDBs anywhere. There's no dependency on Windows, on the
   [DIA SDK](https://msdn.microsoft.com/en-us/library/x93ctkx8.aspx), or on
   the target's native byte ordering.
 
@@ -38,12 +38,12 @@ Usage Example
 ---
 
 ```rust
-use pdb::FallibleIterator;
+use pdb2::FallibleIterator;
 use std::fs::File;
 
-fn main() -> pdb::Result<()> {
+fn main() -> pdb2::Result<()> {
     let file = File::open("fixtures/self/foo.pdb")?;
-    let mut pdb = pdb::PDB::open(file)?;
+    let mut pdb = pdb2::PDB::open(file)?;
 
     let symbol_table = pdb.global_symbols()?;
     let address_map = pdb.address_map()?;
@@ -51,7 +51,7 @@ fn main() -> pdb::Result<()> {
     let mut symbols = symbol_table.iter();
     while let Some(symbol) = symbols.next()? {
         match symbol.parse() {
-            Ok(pdb::SymbolData::Public(data)) if data.function => {
+            Ok(pdb2::SymbolData::Public(data)) if data.function => {
                 // we found the location of a function!
                 let rva = data.offset.to_rva(&address_map).unwrap_or_default
                 println!("{} is {}", rva, data.name);
