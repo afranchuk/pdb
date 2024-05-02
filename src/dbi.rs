@@ -634,8 +634,6 @@ impl<'c> DBISectionMapIter<'c> {
         let sec_count = buf.parse_u16()?;
         let sec_count_log = buf.parse_u16()?;
 
-        println!("sec_count: {}, sec_count_log: {}", sec_count, sec_count_log);
-
         Ok(Self { buf })
     }
 }

@@ -286,11 +286,6 @@ impl<'s, S: Source<'s> + 's> PDB<'s, S> {
             sec_contribs.iter().any(|sc| sc.characteristics.executable() && sc.offset.section == p.section_number)
         }).collect::<Vec<_>>();
 
-        println!("{} items", sec_map.len());
-        for &sc in sec_map.iter() {
-            println!("{:?}", sc);
-        }
-
         if sec_map.len() != 1 {
             eprintln!("Multiple or zero sections in map with executable contributions found, can't synthesize a section");
             return Ok(None);
@@ -298,7 +293,6 @@ impl<'s, S: Source<'s> + 's> PDB<'s, S> {
 
         let sm = sec_map[0];
         const DEFAULT_RVA: u32 = 0x1000; // In the absence of section data and OMAP From, this is 0x1000
-        eprintln!("Synthesized section");
         Ok(Some(vec![
             ImageSectionHeader {
                 name: [0; 8],
