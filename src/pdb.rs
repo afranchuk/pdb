@@ -5,7 +5,9 @@
 // http://opensource.org/licenses/MIT>, at your option. This file may not be
 // copied, modified, or distributed except according to those terms.
 
-use crate::common::*;
+use fallible_iterator::FallibleIterator;
+
+use crate::{common::*, SectionCharacteristics};
 use crate::dbi::{DBIExtraStreams, DBIHeader, DebugInformation, Module};
 use crate::framedata::FrameTable;
 use crate::modi::ModuleInfo;
@@ -253,7 +255,7 @@ impl<'s, S: Source<'s> + 's> PDB<'s, S> {
         let index = self.extra_streams()?.section_headers;
         let stream = match self.raw_stream(index)? {
             Some(stream) => stream,
-            None => return Ok(None),
+            None => return self.maybe_synthesize_section(),
         };
 
         let mut buf = stream.parse_buffer();
@@ -263,6 +265,54 @@ impl<'s, S: Source<'s> + 's> PDB<'s, S> {
         }
 
         Ok(Some(headers))
+    }
+
+    // If there are no section_headers in the file, attempt to synthesize a single
+    // section from the section contributions and section map. This seems to be
+    // necessary to handle NGEN-generated PDB files (.ni.pdb from Crossgen2).
+    fn maybe_synthesize_section(&mut self) -> Result<Option<Vec<ImageSectionHeader>>>
+    {
+        // if we have OMAP From data, we can't do this, it's going to be bogus data
+        if self.omap_from_src()?.is_some() {
+            return Ok(None)
+        }
+
+        let debug_info = self.debug_information()?;
+        let sec_contribs = debug_info.section_contributions()?.collect::<Vec<_>>()?;
+        let sec_map = debug_info.section_map()?.collect::<Vec<_>>()?;
+
+        // grab just the sections that have executable contributions
+        let sec_map = sec_map.into_iter().filter(|p| {
+            sec_contribs.iter().any(|sc| sc.characteristics.executable() && sc.offset.section == p.section_number)
+        }).collect::<Vec<_>>();
+
+        println!("{} items", sec_map.len());
+        for &sc in sec_map.iter() {
+            println!("{:?}", sc);
+        }
+
+        if sec_map.len() != 1 {
+            eprintln!("Multiple or zero sections in map with executable contributions found, can't synthesize a section");
+            return Ok(None);
+        }
+
+        let sm = sec_map[0];
+        const DEFAULT_RVA: u32 = 0x1000; // In the absence of section data and OMAP From, this is 0x1000
+        eprintln!("Synthesized section");
+        Ok(Some(vec![
+            ImageSectionHeader {
+                name: [0; 8],
+                virtual_size: sm.section_length,
+                virtual_address: DEFAULT_RVA,
+                size_of_raw_data: sm.section_length,
+                pointer_to_raw_data: 0,
+                pointer_to_relocations: 0,
+                pointer_to_line_numbers: 0,
+                number_of_relocations: 0,
+                number_of_line_numbers: 0,
+                characteristics: SectionCharacteristics(0x60000020), // IMAGE_SCN_CNT_CODE | IMAGE_SCN_MEM_EXECUTE | IMAGE_SCN_MEM_READ
+            }
+        ]))
     }
 
     /// Retrieve the global frame data table.
