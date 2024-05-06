@@ -598,25 +598,42 @@ impl<'c> FallibleIterator for DBISectionContributionIter<'c> {
 }
 
 /// See https://github.com/google/syzygy/blob/8164b24ebde9c5649c9a09e88a7fc0b0fcbd1bc5/syzygy/pdb/pdb_data.h#L172
+/// Also see https://www.virtualbox.org/browser/vbox/trunk/include/iprt/formats/codeview.h?rev=93115#L272
+/// This is also known as OMF Segment Map. In the OMF SegmentMap structure, flags and section_type
+/// are a single 16-bit value.
 #[derive(Debug, Copy, Clone)]
 pub struct DBISectionMapItem {
+    /// flags: 0x1 read, 0x2 write, 0x4 execute, 0x8 32-bit
     pub flags: u8,
+    /// section_type: 0x1 = SEL, 0x2 = ABS, 0x10 = GROUP
     pub section_type: u8,
-    pub unknown_data_1: u32,
+    /// Overlay number
+    pub overlay: u16,
+    /// group index, 0 if not relevant
+    pub group: u16,
+    /// Technically "frame" in OMF SegmentMap, which is complicated
     pub section_number: u16,
-    pub unknown_data_2: u32, // technically OMFSegMapDesc seg_name_index: u16, class_name_index: u16
+    /// Index into name table, or 0xffff
+    pub seg_name_index: u16,
+    /// Index into name table, or 0xffff
+    pub class_name_index: u16,
+    /// RVA offset of this section
     pub rva_offset: u32,
+    /// Length of this section
     pub section_length: u32,
 }
+
 
 impl DBISectionMapItem {
     fn parse(buf: &mut ParseBuffer<'_>) -> Result<Self> {
         Ok(Self {
             flags: buf.parse_u8()?,
             section_type: buf.parse_u8()?,
-            unknown_data_1: buf.parse_u32()?,
+            overlay: buf.parse_u16()?,
+            group: buf.parse_u16()?,
             section_number: buf.parse_u16()?,
-            unknown_data_2: buf.parse_u32()?,
+            seg_name_index: buf.parse_u16()?,
+            class_name_index: buf.parse_u16()?,
             rva_offset: buf.parse_u32()?,
             section_length: buf.parse_u32()?,
         })
@@ -626,6 +643,10 @@ impl DBISectionMapItem {
 /// A `DBISectionMapIter` iterates over the section map in the DBI section, producing `DBISectionMap`s.
 #[derive(Debug)]
 pub struct DBISectionMapIter<'c> {
+    /// The section count.
+    pub sec_count: u16,
+    /// The logical section count. Typically equals sec_count, if no groups are in use. (?)
+    pub sec_count_log: u16,
     buf: ParseBuffer<'c>,
 }
 
@@ -634,7 +655,7 @@ impl<'c> DBISectionMapIter<'c> {
         let sec_count = buf.parse_u16()?;
         let sec_count_log = buf.parse_u16()?;
 
-        Ok(Self { buf })
+        Ok(Self { buf, sec_count, sec_count_log })
     }
 }
 

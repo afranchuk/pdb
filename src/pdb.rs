@@ -267,46 +267,66 @@ impl<'s, S: Source<'s> + 's> PDB<'s, S> {
         Ok(Some(headers))
     }
 
-    // If there are no section_headers in the file, attempt to synthesize a single
-    // section from the section contributions and section map. This seems to be
-    // necessary to handle NGEN-generated PDB files (.ni.pdb from Crossgen2).
+    // If there are no section_headers in the file, attempt to synthesize sections
+    // based on the section map. This seems to be necessary to handle NGEN-generated PDB
+    // files (.ni.pdb from Crossgen2).
     fn maybe_synthesize_section(&mut self) -> Result<Option<Vec<ImageSectionHeader>>>
     {
-        // if we have OMAP From data, we can't do this, it's going to be bogus data
+        // If we have OMAP From data, I don't believe we can do this, because the RVAs
+        // won't map. But I'm not 100% sure of that, be conservative.
         if self.omap_from_src()?.is_some() {
             return Ok(None)
         }
 
         let debug_info = self.debug_information()?;
-        let sec_contribs = debug_info.section_contributions()?.collect::<Vec<_>>()?;
-        let sec_map = debug_info.section_map()?.collect::<Vec<_>>()?;
-
-        // grab just the sections that have executable contributions
-        let sec_map = sec_map.into_iter().filter(|p| {
-            sec_contribs.iter().any(|sc| sc.characteristics.executable() && sc.offset.section == p.section_number)
-        }).collect::<Vec<_>>();
-
-        if sec_map.len() != 1 {
-            eprintln!("Multiple or zero sections in map with executable contributions found, can't synthesize a section");
-            return Ok(None);
+        let sec_map = debug_info.section_map()?;
+        if sec_map.sec_count != sec_map.sec_count_log {
+            return Ok(None)
         }
+        let sec_map = sec_map.collect::<Vec<_>>()?;
 
-        let sm = sec_map[0];
-        const DEFAULT_RVA: u32 = 0x1000; // In the absence of section data and OMAP From, this is 0x1000
-        Ok(Some(vec![
+        let mut rva = 0x1000u32; // in the absence of explicit section data, this starts at 0x1000
+        let sections = sec_map.into_iter()
+        .filter(|sm| {
+            // the section with a bogus section length also doesn't have any rwx flags,
+            // and has section_type == 2
+            sm.section_type == 1 && // "SEL" section, not ABS (0x2) or GROUP (0x10)
+            sm.section_length != u32::MAX // shouldn't happen, but just in case
+        })
+        .map(|sm| {
+            let mut characteristics = 0u32;
+            if sm.flags & 0x1 != 0 { // R
+                characteristics |= 0x40000000; // IMAGE_SCN_MEM_READ
+            }
+            if sm.flags & 0x2 != 0 { // W
+                characteristics |= 0x80000000; // IMAGE_SCN_MEM_WRITE
+            }
+            if sm.flags & 0x4 != 0 { // X
+                characteristics |= 0x20000000; // IMAGE_SCN_MEM_EXECUTE
+                characteristics |= 0x20; // IMAGE_SCN_CNT_CODE
+            }
+
+            if sm.rva_offset != 0 {
+                eprintln!("pdb: synthesizing section with rva_offset != 0, might not be correct! {:?}", sm);
+            }
+
+            let this_rva = rva + sm.rva_offset;
+            rva = this_rva + sm.section_length;
             ImageSectionHeader {
                 name: [0; 8],
                 virtual_size: sm.section_length,
-                virtual_address: DEFAULT_RVA,
+                virtual_address: this_rva,
                 size_of_raw_data: sm.section_length,
                 pointer_to_raw_data: 0,
                 pointer_to_relocations: 0,
                 pointer_to_line_numbers: 0,
                 number_of_relocations: 0,
                 number_of_line_numbers: 0,
-                characteristics: SectionCharacteristics(0x60000020), // IMAGE_SCN_CNT_CODE | IMAGE_SCN_MEM_EXECUTE | IMAGE_SCN_MEM_READ
+                characteristics: SectionCharacteristics(characteristics),
             }
-        ]))
+        }).collect::<Vec<_>>();
+
+        Ok(Some(sections))
     }
 
     /// Retrieve the global frame data table.
