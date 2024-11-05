@@ -318,7 +318,9 @@ pub(crate) fn parse_type_data<'t>(buf: &mut ParseBuffer<'t>) -> Result<TypeData<
             //println!("array: {:x}", buf);
             //println!("dimensions: {:?}", dimensions);
 
-            assert!(buf.is_empty());
+            // Vector35/binaryninja-api#6076: NativeAOT PDBs have extra data here
+            // of unknown purpose
+            //assert!(buf.is_empty());
 
             Ok(TypeData::Array(ArrayType {
                 element_type,
