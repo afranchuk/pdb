@@ -93,18 +93,18 @@ fn find_classes() {
                     match type_finder.find(fields).expect("find fields").parse() {
                         Ok(pdb::TypeData::FieldList(list)) => {
                             for field in list.fields {
-                                println!("  - {:?}", field);
+                                println!("  - {field:?}");
                             }
 
                             if let Some(c) = list.continuation {
-                                println!("TODO: follow to type {}", c);
+                                println!("TODO: follow to type {c}");
                             }
                         }
                         Ok(value) => {
                             panic!("expected a field list, got {:?}", value);
                         }
                         Err(e) => {
-                            println!("field parse error: {}", e);
+                            println!("field parse error: {e}");
                         }
                     }
                 }
@@ -115,18 +115,18 @@ fn find_classes() {
                     match type_finder.find(data.fields).expect("find fields").parse() {
                         Ok(pdb::TypeData::FieldList(list)) => {
                             for field in list.fields {
-                                println!("  - {:?}", field);
+                                println!("  - {field:?}");
                             }
 
                             if let Some(c) = list.continuation {
-                                println!("TODO: follow to type {}", c);
+                                println!("TODO: follow to type {c}");
                             }
                         }
                         Ok(value) => {
                             panic!("expected a field list, got {:?}", value);
                         }
                         Err(e) => {
-                            println!("field parse error: {}", e);
+                            println!("field parse error: {e}");
                         }
                     }
                 }
@@ -137,7 +137,7 @@ fn find_classes() {
                     //println!("type: {:?}", data);
                 }
                 Err(pdb::Error::UnimplementedTypeKind(kind)) => {
-                    println!("unimplemented: 0x{:04x}", kind);
+                    println!("unimplemented: 0x{kind:04x}");
                     // TODO: parse everything
                     // ignore for now
                 }

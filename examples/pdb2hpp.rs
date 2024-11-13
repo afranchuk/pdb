@@ -83,12 +83,12 @@ pub fn type_name(
         pdb::TypeData::Array(data) => {
             let mut name = type_name(type_finder, data.element_type, needed_types)?;
             for size in data.dimensions {
-                name = format!("{}[{}]", name, size);
+                name = format!("{name}[{size}]");
             }
             name
         }
 
-        _ => format!("Type{} /* TODO: figure out how to name it */", type_index),
+        _ => format!("Type{type_index} /* TODO: figure out how to name it */"),
     };
 
     // TODO: search and replace std:: patterns
@@ -139,10 +139,7 @@ impl<'p> Class<'p> {
                 }
             }
             other => {
-                println!(
-                    "trying to Class::add_fields() got {} -> {:?}",
-                    type_index, other
-                );
+                println!("trying to Class::add_fields() got {type_index} -> {other:?}");
                 panic!("unexpected type in Class::add_fields()");
             }
         }
@@ -352,7 +349,7 @@ impl<'p> Method<'p> {
             }),
 
             other => {
-                println!("other: {:?}", other);
+                println!("other: {other:?}");
                 Err(pdb::Error::UnimplementedFeature("that"))
             }
         }
@@ -404,10 +401,7 @@ impl<'p> Enum<'p> {
                 }
             }
             other => {
-                println!(
-                    "trying to Enum::add_fields() got {} -> {:?}",
-                    type_index, other
-                );
+                println!("trying to Enum::add_fields() got {type_index} -> {other:?}");
                 panic!("unexpected type in Enum::add_fields()");
             }
         }
@@ -441,14 +435,14 @@ impl fmt::Display for Enum<'_> {
                 "\t{} = {},",
                 value.name.to_string(),
                 match value.value {
-                    pdb::Variant::U8(v) => format!("0x{:02x}", v),
-                    pdb::Variant::U16(v) => format!("0x{:04x}", v),
-                    pdb::Variant::U32(v) => format!("0x{:08x}", v),
-                    pdb::Variant::U64(v) => format!("0x{:16x}", v),
-                    pdb::Variant::I8(v) => format!("{}", v),
-                    pdb::Variant::I16(v) => format!("{}", v),
-                    pdb::Variant::I32(v) => format!("{}", v),
-                    pdb::Variant::I64(v) => format!("{}", v),
+                    pdb::Variant::U8(v) => format!("0x{v:02x}"),
+                    pdb::Variant::U16(v) => format!("0x{v:04x}"),
+                    pdb::Variant::U32(v) => format!("0x{v:08x}"),
+                    pdb::Variant::U64(v) => format!("0x{v:16x}"),
+                    pdb::Variant::I8(v) => format!("{v}"),
+                    pdb::Variant::I16(v) => format!("{v}"),
+                    pdb::Variant::I32(v) => format!("{v}"),
+                    pdb::Variant::I64(v) => format!("{v}"),
                 }
             )?;
         }
@@ -580,7 +574,7 @@ impl<'p> Data<'p> {
             }
 
             // ignore
-            other => eprintln!("warning: don't know how to add {:?}", other),
+            other => eprintln!("warning: don't know how to add {other:?}"),
         }
 
         Ok(())
@@ -622,16 +616,16 @@ fn write_class(filename: &str, class_name: &str) -> pdb::Result<()> {
     }
 
     if data.classes.is_empty() {
-        eprintln!("sorry, class {} was not found", class_name);
+        eprintln!("sorry, class {class_name} was not found");
     } else {
-        println!("{}", data);
+        println!("{data}");
     }
 
     Ok(())
 }
 
 fn print_usage(program: &str, opts: getopts::Options) {
-    let brief = format!("Usage: {} input.pdb ClassName", program);
+    let brief = format!("Usage: {program} input.pdb ClassName");
     print!("{}", opts.usage(&brief));
 }
 
@@ -656,6 +650,6 @@ fn main() {
 
     match write_class(filename, class_name) {
         Ok(_) => (),
-        Err(e) => eprintln!("error dumping PDB: {}", e),
+        Err(e) => eprintln!("error dumping PDB: {e}"),
     }
 }

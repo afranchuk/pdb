@@ -18,80 +18,80 @@ use crate::common::*;
 
 /// The section should not be padded to the next boundary. This flag is
 /// obsolete and is replaced by `IMAGE_SCN_ALIGN_1BYTES`.
-const IMAGE_SCN_TYPE_NO_PAD: u32 = 0x00000008;
+const IMAGE_SCN_TYPE_NO_PAD: u32 = 0x0000_0008;
 /// The section contains executable code.
-pub const IMAGE_SCN_CNT_CODE: u32 = 0x00000020;
+pub const IMAGE_SCN_CNT_CODE: u32 = 0x0000_0020;
 /// The section contains initialized data.
-const IMAGE_SCN_CNT_INITIALIZED_DATA: u32 = 0x00000040;
+const IMAGE_SCN_CNT_INITIALIZED_DATA: u32 = 0x0000_0040;
 /// The section contains uninitialized data.
-const IMAGE_SCN_CNT_UNINITIALIZED_DATA: u32 = 0x00000080;
+const IMAGE_SCN_CNT_UNINITIALIZED_DATA: u32 = 0x0000_0080;
 /// Reserved.
-const IMAGE_SCN_LNK_OTHER: u32 = 0x00000100;
+const IMAGE_SCN_LNK_OTHER: u32 = 0x0000_0100;
 /// The section contains comments or other information. This is valid only for object files.
-const IMAGE_SCN_LNK_INFO: u32 = 0x00000200;
+const IMAGE_SCN_LNK_INFO: u32 = 0x0000_0200;
 /// The section will not become part of the image. This is valid only for object files.
-const IMAGE_SCN_LNK_REMOVE: u32 = 0x00000800;
+const IMAGE_SCN_LNK_REMOVE: u32 = 0x0000_0800;
 /// The section contains COMDAT data. This is valid only for object files.
-const IMAGE_SCN_LNK_COMDAT: u32 = 0x00001000;
+const IMAGE_SCN_LNK_COMDAT: u32 = 0x0000_1000;
 /// Reset speculative exceptions handling bits in the TLB entries for this section.
-const IMAGE_SCN_NO_DEFER_SPEC_EXC: u32 = 0x00004000;
+const IMAGE_SCN_NO_DEFER_SPEC_EXC: u32 = 0x0000_4000;
 /// The section contains data referenced through the global pointer.
-const IMAGE_SCN_GPREL: u32 = 0x00008000;
+const IMAGE_SCN_GPREL: u32 = 0x0000_8000;
 /// Reserved.
-const IMAGE_SCN_MEM_PURGEABLE: u32 = 0x00020000;
+const IMAGE_SCN_MEM_PURGEABLE: u32 = 0x0002_0000;
 /// Reserved.
-const IMAGE_SCN_MEM_LOCKED: u32 = 0x00040000;
+const IMAGE_SCN_MEM_LOCKED: u32 = 0x0004_0000;
 /// Reserved.
-const IMAGE_SCN_MEM_PRELOAD: u32 = 0x00080000;
+const IMAGE_SCN_MEM_PRELOAD: u32 = 0x0008_0000;
 /// Align data on a 1-byte boundary. This is valid only for object files.
-const IMAGE_SCN_ALIGN_1BYTES: u32 = 0x00100000;
+const IMAGE_SCN_ALIGN_1BYTES: u32 = 0x0010_0000;
 /// Align data on a 2-byte boundary. This is valid only for object files.
-const IMAGE_SCN_ALIGN_2BYTES: u32 = 0x00200000;
+const IMAGE_SCN_ALIGN_2BYTES: u32 = 0x0020_0000;
 /// Align data on a 4-byte boundary. This is valid only for object files.
-const IMAGE_SCN_ALIGN_4BYTES: u32 = 0x00300000;
+const IMAGE_SCN_ALIGN_4BYTES: u32 = 0x0030_0000;
 /// Align data on a 8-byte boundary. This is valid only for object files.
-const IMAGE_SCN_ALIGN_8BYTES: u32 = 0x00400000;
+const IMAGE_SCN_ALIGN_8BYTES: u32 = 0x0040_0000;
 /// Align data on a 16-byte boundary. This is valid only for object files.
-const IMAGE_SCN_ALIGN_16BYTES: u32 = 0x00500000;
+const IMAGE_SCN_ALIGN_16BYTES: u32 = 0x0050_0000;
 /// Align data on a 32-byte boundary. This is valid only for object files.
-const IMAGE_SCN_ALIGN_32BYTES: u32 = 0x00600000;
+const IMAGE_SCN_ALIGN_32BYTES: u32 = 0x0060_0000;
 /// Align data on a 64-byte boundary. This is valid only for object files.
-const IMAGE_SCN_ALIGN_64BYTES: u32 = 0x00700000;
+const IMAGE_SCN_ALIGN_64BYTES: u32 = 0x0070_0000;
 /// Align data on a 128-byte boundary. This is valid only for object files.
-const IMAGE_SCN_ALIGN_128BYTES: u32 = 0x00800000;
+const IMAGE_SCN_ALIGN_128BYTES: u32 = 0x0080_0000;
 /// Align data on a 256-byte boundary. This is valid only for object files.
-const IMAGE_SCN_ALIGN_256BYTES: u32 = 0x00900000;
+const IMAGE_SCN_ALIGN_256BYTES: u32 = 0x0090_0000;
 /// Align data on a 512-byte boundary. This is valid only for object files.
-const IMAGE_SCN_ALIGN_512BYTES: u32 = 0x00A00000;
+const IMAGE_SCN_ALIGN_512BYTES: u32 = 0x00A0_0000;
 /// Align data on a 1024-byte boundary. This is valid only for object files.
-const IMAGE_SCN_ALIGN_1024BYTES: u32 = 0x00B00000;
+const IMAGE_SCN_ALIGN_1024BYTES: u32 = 0x00B0_0000;
 /// Align data on a 2048-byte boundary. This is valid only for object files.
-const IMAGE_SCN_ALIGN_2048BYTES: u32 = 0x00C00000;
+const IMAGE_SCN_ALIGN_2048BYTES: u32 = 0x00C0_0000;
 /// Align data on a 4096-byte boundary. This is valid only for object files.
-const IMAGE_SCN_ALIGN_4096BYTES: u32 = 0x00D00000;
+const IMAGE_SCN_ALIGN_4096BYTES: u32 = 0x00D0_0000;
 /// Align data on a 8192-byte boundary. This is valid only for object files.
-const IMAGE_SCN_ALIGN_8192BYTES: u32 = 0x00E00000;
+const IMAGE_SCN_ALIGN_8192BYTES: u32 = 0x00E0_0000;
 /// The section contains extended relocations. The count of relocations for the
 /// section exceeds the 16 bits that is reserved for it in the section header.
 /// If the `number_of_relocations` field in the section header is `0xffff`, the
 /// actual relocation count is stored in the `virtual_address` field of the first
 /// relocation. It is an error if `IMAGE_SCN_LNK_NRELOC_OVFL` is set and there
 /// are fewer than `0xffff` relocations in the section.
-const IMAGE_SCN_LNK_NRELOC_OVFL: u32 = 0x01000000;
+const IMAGE_SCN_LNK_NRELOC_OVFL: u32 = 0x0100_0000;
 /// The section can be discarded as needed.
-const IMAGE_SCN_MEM_DISCARDABLE: u32 = 0x02000000;
+const IMAGE_SCN_MEM_DISCARDABLE: u32 = 0x0200_0000;
 /// The section cannot be cached.
-const IMAGE_SCN_MEM_NOT_CACHED: u32 = 0x04000000;
+const IMAGE_SCN_MEM_NOT_CACHED: u32 = 0x0400_0000;
 /// The section cannot be paged.
-const IMAGE_SCN_MEM_NOT_PAGED: u32 = 0x08000000;
+const IMAGE_SCN_MEM_NOT_PAGED: u32 = 0x0800_0000;
 /// The section can be shared in memory.
-const IMAGE_SCN_MEM_SHARED: u32 = 0x10000000;
+const IMAGE_SCN_MEM_SHARED: u32 = 0x1000_0000;
 /// The section can be executed as code.
-pub const IMAGE_SCN_MEM_EXECUTE: u32 = 0x20000000;
+pub const IMAGE_SCN_MEM_EXECUTE: u32 = 0x2000_0000;
 /// The section can be read.
-pub const IMAGE_SCN_MEM_READ: u32 = 0x40000000;
+pub const IMAGE_SCN_MEM_READ: u32 = 0x4000_0000;
 /// The section can be written to.
-pub const IMAGE_SCN_MEM_WRITE: u32 = 0x80000000;
+pub const IMAGE_SCN_MEM_WRITE: u32 = 0x8000_0000;
 
 /// Characteristic flags of an [`ImageSectionHeader`].
 ///
@@ -103,61 +103,73 @@ pub struct SectionCharacteristics(pub u32);
 
 impl SectionCharacteristics {
     /// The section contains executable code.
+    #[must_use]
     pub fn executable(self) -> bool {
         (self.0 & IMAGE_SCN_CNT_CODE) > 0
     }
 
     /// The section contains initialized data.
+    #[must_use]
     pub fn initialized_data(self) -> bool {
         (self.0 & IMAGE_SCN_CNT_INITIALIZED_DATA) > 0
     }
 
     /// The section contains uninitialized data.
+    #[must_use]
     pub fn uninitialized_data(self) -> bool {
         (self.0 & IMAGE_SCN_CNT_UNINITIALIZED_DATA) > 0
     }
 
     /// Reserved.
+    #[must_use]
     pub fn other(self) -> bool {
         (self.0 & IMAGE_SCN_LNK_OTHER) > 0
     }
 
     /// The section contains comments or other information. This is valid only for object files.
+    #[must_use]
     pub fn info(self) -> bool {
         (self.0 & IMAGE_SCN_LNK_INFO) > 0
     }
 
     /// The section will not become part of the image. This is valid only for object files.
+    #[must_use]
     pub fn remove(self) -> bool {
         (self.0 & IMAGE_SCN_LNK_REMOVE) > 0
     }
 
     /// The section contains COMDAT data. This is valid only for object files.
+    #[must_use]
     pub fn comdat(self) -> bool {
         (self.0 & IMAGE_SCN_LNK_COMDAT) > 0
     }
 
     /// Reset speculative exceptions handling bits in the TLB entries for this section.
+    #[must_use]
     pub fn defer_speculative_exceptions(self) -> bool {
         (self.0 & IMAGE_SCN_NO_DEFER_SPEC_EXC) > 0
     }
 
     /// The section contains data referenced through the global pointer.
+    #[must_use]
     pub fn global_pointer_relative(self) -> bool {
         (self.0 & IMAGE_SCN_GPREL) > 0
     }
 
     /// Reserved.
+    #[must_use]
     pub fn purgeable(self) -> bool {
         (self.0 & IMAGE_SCN_MEM_PURGEABLE) > 0
     }
 
     /// Reserved.
+    #[must_use]
     pub fn locked(self) -> bool {
         (self.0 & IMAGE_SCN_MEM_LOCKED) > 0
     }
 
     /// Reserved.
+    #[must_use]
     pub fn preload(self) -> bool {
         (self.0 & IMAGE_SCN_MEM_PRELOAD) > 0
     }
@@ -167,9 +179,10 @@ impl SectionCharacteristics {
     /// This is valid only for object files. Returns `Some` if alignment is specified, and `None` if
     /// no alignment is specified. An alignment of `Some(1)` means that the section should not be
     /// padded to a boundary.
+    #[must_use]
     pub fn alignment(self) -> Option<u16> {
         // Mask covering all align values and IMAGE_SCN_TYPE_NO_PAD.
-        match self.0 & 0x00F00008 {
+        match self.0 & 0x00F0_0008 {
             self::IMAGE_SCN_ALIGN_1BYTES => Some(1),
             self::IMAGE_SCN_ALIGN_2BYTES => Some(2),
             self::IMAGE_SCN_ALIGN_4BYTES => Some(4),
@@ -196,41 +209,49 @@ impl SectionCharacteristics {
     /// field in the section header is `0xffff`, the actual relocation count is stored in the
     /// `virtual_address` field of the first relocation. It is an error if this flag is set and
     /// there are fewer than `0xffff` relocations in the section.
+    #[must_use]
     pub fn lnk_nreloc_ovfl(self) -> bool {
         (self.0 & IMAGE_SCN_LNK_NRELOC_OVFL) > 0
     }
 
     /// The section can be discarded as needed.
+    #[must_use]
     pub fn discardable(self) -> bool {
         (self.0 & IMAGE_SCN_MEM_DISCARDABLE) > 0
     }
 
     /// The section cannot be cached.
+    #[must_use]
     pub fn not_cached(self) -> bool {
         (self.0 & IMAGE_SCN_MEM_NOT_CACHED) > 0
     }
 
     /// The section cannot be paged.
+    #[must_use]
     pub fn not_paged(self) -> bool {
         (self.0 & IMAGE_SCN_MEM_NOT_PAGED) > 0
     }
 
     /// The section can be shared in memory.
+    #[must_use]
     pub fn shared(self) -> bool {
         (self.0 & IMAGE_SCN_MEM_SHARED) > 0
     }
 
     /// The section can be executed as code.
+    #[must_use]
     pub fn execute(self) -> bool {
         (self.0 & IMAGE_SCN_MEM_EXECUTE) > 0
     }
 
     /// The section can be read.
+    #[must_use]
     pub fn read(self) -> bool {
         (self.0 & IMAGE_SCN_MEM_READ) > 0
     }
 
     /// The section can be written to.
+    #[must_use]
     pub fn write(self) -> bool {
         (self.0 & IMAGE_SCN_MEM_WRITE) > 0
     }
@@ -369,6 +390,7 @@ impl ImageSectionHeader {
     }
 
     /// Returns the name of the section.
+    #[must_use]
     pub fn name(&self) -> &str {
         let end = self
             .name

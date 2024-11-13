@@ -81,6 +81,7 @@ impl<'s> DebugInformation<'s> {
     /// checked for matching the image.
     ///
     /// [`PDBInformation::age`]: crate::PDBInformation::age
+    #[must_use]
     pub fn age(&self) -> Option<u32> {
         match self.header.age {
             0 => None,
@@ -90,10 +91,11 @@ impl<'s> DebugInformation<'s> {
 
     /// Returns whether or not this PDB has been marked as stripped. Stripped PDBs do not contain
     /// type information, line number information, or per-object CV symbols.
-    /// 
+    ///
     /// This flag is set when a PDB is written with [/PDBSTRIPPED] by MSVC.
-    /// 
+    ///
     /// [/PDBSTRIPPED]: https://learn.microsoft.com/en-us/cpp/build/reference/pdbstripped-strip-private-symbols?view=msvc-170
+    #[must_use]
     pub fn is_stripped(&self) -> bool {
         // flags.fStripped
         (self.header.flags & 0x2) != 0
@@ -258,7 +260,7 @@ impl DBIHeader {
             reserved: buf.parse_u32()?,
         };
 
-        if header.signature != u32::max_value() {
+        if header.signature != u32::MAX {
             // this is likely a DBIHdr, not a NewDBIHdr
             // it could be promoted:
             //   https://github.com/Microsoft/microsoft-pdb/blob/082c5290e5aff028ae84e43affa8be717aa7af73/PDB/dbi/dbi.cpp#L291-L313
@@ -514,6 +516,7 @@ impl<'m> Module<'m> {
     /// The module name.
     ///
     /// Usually either a full path to an object file or a string of the form `Import:<dll name>`.
+    #[must_use]
     pub fn module_name(&self) -> Cow<'m, str> {
         self.module_name.to_string()
     }
@@ -522,6 +525,7 @@ impl<'m> Module<'m> {
     /// May be the same as `module_name` for object files passed directly
     /// to the linker. For modules from static libraries, this is usually
     /// the full path to the archive.
+    #[must_use]
     pub fn object_file_name(&self) -> Cow<'m, str> {
         self.object_file_name.to_string()
     }
@@ -590,7 +594,7 @@ impl<'c> DBISectionContributionIter<'c> {
     }
 }
 
-impl<'c> FallibleIterator for DBISectionContributionIter<'c> {
+impl FallibleIterator for DBISectionContributionIter<'_> {
     type Item = DBISectionContribution;
     type Error = Error;
 
@@ -699,7 +703,7 @@ impl<'c> DBISectionMapIter<'c> {
     }
 }
 
-impl<'c> FallibleIterator for DBISectionMapIter<'c> {
+impl FallibleIterator for DBISectionMapIter<'_> {
     type Item = DBISectionMapItem;
     type Error = Error;
 

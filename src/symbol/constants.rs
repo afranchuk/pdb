@@ -271,7 +271,7 @@ pub const S_LDATA_HLSL32_EX: u16 = 0x1165;
 pub const S_FASTLINK: u16 = 0x1167; // generated at link time for /DEBUG:FASTLINK
 pub const S_INLINEES: u16 = 0x1168;
 
-/// These values correspond to the CV_CPU_TYPE_e enumeration, and are documented
+/// These values correspond to the `CV_CPU_TYPE_e` enumeration, and are documented
 /// [on MSDN](https://msdn.microsoft.com/en-us/library/b2fc64ek.aspx).
 #[non_exhaustive]
 #[allow(missing_docs)]
@@ -482,7 +482,7 @@ impl<'a> TryFromCtx<'a, Endian> for CPUType {
     }
 }
 
-/// These values correspond to the CV_CFL_LANG enumeration, and are documented
+/// These values correspond to the `CV_CFL_LANG` enumeration, and are documented
 /// [on MSDN](https://learn.microsoft.com/en-us/visualstudio/debugger/debug-interface-access/cv-cfl-lang?view=vs-2022).
 #[non_exhaustive]
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

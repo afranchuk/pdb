@@ -223,6 +223,7 @@ impl<'a> LineProgram<'a> {
     /// Note that line records are not guaranteed to be ordered by source code offset. If a
     /// monotonic order by `PdbInternalSectionOffset` or `Rva` is required, the lines have to be
     /// sorted manually.
+    #[must_use]
     pub fn lines(&self) -> LineIterator<'_> {
         match self.inner {
             LineProgramInner::C13(ref inner) => LineIterator {
@@ -232,6 +233,7 @@ impl<'a> LineProgram<'a> {
     }
 
     /// Returns an iterator over all file records of this module.
+    #[must_use]
     pub fn files(&self) -> FileIterator<'a> {
         match self.inner {
             LineProgramInner::C13(ref inner) => FileIterator {
@@ -250,6 +252,7 @@ impl<'a> LineProgram<'a> {
     /// Note that line records are not guaranteed to be ordered by source code offset. If a
     /// monotonic order by `PdbInternalSectionOffset` or `Rva` is required, the lines have to be
     /// sorted manually.
+    #[must_use]
     pub fn lines_for_symbol(&self, offset: PdbInternalSectionOffset) -> LineIterator<'_> {
         match self.inner {
             LineProgramInner::C13(ref inner) => LineIterator {
@@ -285,7 +288,7 @@ impl Default for LineIterator<'_> {
     }
 }
 
-impl<'a> FallibleIterator for LineIterator<'a> {
+impl FallibleIterator for LineIterator<'_> {
     type Item = LineInfo;
     type Error = Error;
 

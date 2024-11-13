@@ -123,69 +123,61 @@ impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> ::std::result::Result<(), fmt::Error> {
         match self {
             Self::PageReferenceOutOfRange(p) => {
-                write!(f, "MSF referred to page number ({}) out of range", p)
+                write!(f, "MSF referred to page number ({p}) out of range")
             }
             Self::InvalidPageSize(n) => write!(
                 f,
-                "The MSF header specifies an invalid page size ({} bytes)",
-                n
+                "The MSF header specifies an invalid page size ({n} bytes)"
             ),
             Self::StreamNotFound(s) => {
-                write!(f, "The requested stream ({}) is not stored in this file", s)
+                write!(f, "The requested stream ({s}) is not stored in this file")
             }
             Self::InvalidStreamLength(s) => write!(
                 f,
-                "{} stream has an invalid length or alignment for its records",
-                s
+                "{s} stream has an invalid length or alignment for its records"
             ),
-            Self::IoError(ref e) => write!(f, "IO error while reading PDB: {}", e),
+            Self::IoError(ref e) => write!(f, "IO error while reading PDB: {e}"),
             Self::UnimplementedFeature(feature) => {
-                write!(f, "Unimplemented PDB feature: {}", feature)
+                write!(f, "Unimplemented PDB feature: {feature}")
             }
             Self::UnimplementedSymbolKind(kind) => write!(
                 f,
-                "Support for symbols of kind {:#06x} is not implemented",
-                kind
+                "Support for symbols of kind {kind:#06x} is not implemented"
             ),
             Self::InvalidTypeInformationHeader(reason) => {
-                write!(f, "The type information header was invalid: {}", reason)
+                write!(f, "The type information header was invalid: {reason}")
             }
-            Self::TypeNotFound(type_index) => write!(f, "Type {} not found", type_index),
+            Self::TypeNotFound(type_index) => write!(f, "Type {type_index} not found"),
             Self::TypeNotIndexed(type_index, indexed_count) => write!(
                 f,
-                "Type {} not indexed (index covers {})",
-                type_index, indexed_count
+                "Type {type_index} not indexed (index covers {indexed_count})"
             ),
             Self::UnimplementedTypeKind(kind) => write!(
                 f,
-                "Support for types of kind {:#06x} is not implemented",
-                kind
+                "Support for types of kind {kind:#06x} is not implemented"
             ),
             Self::NotACrossModuleRef(index) => {
-                write!(f, "Type {:#06x} is not a cross module reference", index)
+                write!(f, "Type {index:#06x} is not a cross module reference")
             }
             Self::CrossModuleRefNotFound(index) => write!(
                 f,
-                "Cross module reference {:#06x} not found in imports",
-                index
+                "Cross module reference {index:#06x} not found in imports"
             ),
             Self::UnexpectedNumericPrefix(prefix) => write!(
                 f,
-                "Variable-length numeric parsing encountered an unexpected prefix ({:#06x}",
-                prefix
+                "Variable-length numeric parsing encountered an unexpected prefix ({prefix:#06x}"
             ),
             Self::UnimplementedDebugSubsection(kind) => write!(
                 f,
-                "Debug module subsection of kind {:#06x} is not implemented",
-                kind
+                "Debug module subsection of kind {kind:#06x} is not implemented"
             ),
             Self::UnimplementedFileChecksumKind(kind) => {
-                write!(f, "Unknown source file checksum kind {}", kind)
+                write!(f, "Unknown source file checksum kind {kind}")
             }
             Self::InvalidFileChecksumOffset(offset) => {
-                write!(f, "Invalid source file checksum offset {:#x}", offset)
+                write!(f, "Invalid source file checksum offset {offset:#x}")
             }
-            Self::UnknownBinaryAnnotation(num) => write!(f, "Unknown binary annotation {}", num),
+            Self::UnknownBinaryAnnotation(num) => write!(f, "Unknown binary annotation {num}"),
             _ => fmt::Debug::fmt(self, f),
         }
     }
@@ -266,6 +258,7 @@ macro_rules! impl_opt {
         impl $type {
             /// Returns an index that points to no value.
             #[inline]
+            #[must_use]
             pub const fn none() -> Self {
                 Self($none)
             }
@@ -299,32 +292,38 @@ macro_rules! impl_va {
     ($type:ty) => {
         impl $type {
             /// Checked addition of an offset. Returns `None` if overflow occurred.
+            #[must_use]
             pub fn checked_add(self, offset: u32) -> Option<Self> {
                 Some(Self(self.0.checked_add(offset)?))
             }
 
             /// Checked computation of an offset between two addresses. Returns `None` if `other` is
             /// larger.
+            #[must_use]
             pub fn checked_sub(self, other: Self) -> Option<u32> {
                 self.0.checked_sub(other.0)
             }
 
             /// Saturating addition of an offset, clipped at the numeric bounds.
+            #[must_use]
             pub fn saturating_add(self, offset: u32) -> Self {
                 Self(self.0.saturating_add(offset))
             }
 
             /// Saturating computation of an offset between two addresses, clipped at zero.
+            #[must_use]
             pub fn saturating_sub(self, other: Self) -> u32 {
                 self.0.saturating_sub(other.0)
             }
 
             /// Wrapping (modular) addition of an offset.
+            #[must_use]
             pub fn wrapping_add(self, offset: u32) -> Self {
                 Self(self.0.wrapping_add(offset))
             }
 
             /// Wrapping (modular) computation of an offset between two addresses.
+            #[must_use]
             pub fn wrapping_sub(self, other: Self) -> u32 {
                 self.0.wrapping_sub(other.0)
             }
@@ -388,11 +387,13 @@ macro_rules! impl_section_offset {
     ($type:ty) => {
         impl $type {
             /// Creates a new section offset.
+            #[must_use]
             pub fn new(section: u16, offset: u32) -> Self {
                 Self { offset, section }
             }
 
             /// Returns whether this section offset points to a valid section or into the void.
+            #[must_use]
             pub fn is_valid(self) -> bool {
                 self.section != 0
             }
@@ -401,6 +402,7 @@ macro_rules! impl_section_offset {
             ///
             /// This does not check whether the offset is still valid within the given section. If
             /// the offset is out of bounds, the conversion to `Rva` will return `None`.
+            #[must_use]
             pub fn checked_add(mut self, offset: u32) -> Option<Self> {
                 self.offset = self.offset.checked_add(offset)?;
                 Some(self)
@@ -410,6 +412,7 @@ macro_rules! impl_section_offset {
             ///
             /// This does not check whether the offset is still valid within the given section. If
             /// the offset is out of bounds, the conversion to `Rva` will return `None`.
+            #[must_use]
             pub fn saturating_add(mut self, offset: u32) -> Self {
                 self.offset = self.offset.saturating_add(offset);
                 self
@@ -419,6 +422,7 @@ macro_rules! impl_section_offset {
             ///
             /// This does not check whether the offset is still valid within the given section. If
             /// the offset is out of bounds, the conversion to `Rva` will return `None`.
+            #[must_use]
             pub fn wrapping_add(mut self, offset: u32) -> Self {
                 self.offset = self.offset.wrapping_add(offset);
                 self
@@ -548,7 +552,7 @@ impl StreamIndex {
 impl fmt::Display for StreamIndex {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self.msf_number() {
-            Some(number) => write!(f, "{}", number),
+            Some(number) => write!(f, "{number}"),
             None => write!(f, "None"),
         }
     }
@@ -556,7 +560,7 @@ impl fmt::Display for StreamIndex {
 
 impl fmt::Debug for StreamIndex {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "StreamIndex({})", self)
+        write!(f, "StreamIndex({self})")
     }
 }
 
@@ -720,7 +724,7 @@ impl<'b> ParseBuffer<'b> {
         self.0.len() - self.1
     }
 
-    /// Determines whether this ParseBuffer has been consumed.
+    /// Determines whether this `ParseBuffer` has been consumed.
     #[inline]
     pub fn is_empty(&self) -> bool {
         self.len() == 0
@@ -835,11 +839,11 @@ impl<'b> From<&'b [u8]> for ParseBuffer<'b> {
     }
 }
 
-impl<'b> fmt::LowerHex for ParseBuffer<'b> {
+impl fmt::LowerHex for ParseBuffer<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> result::Result<(), fmt::Error> {
         write!(f, "ParseBuf::from(\"")?;
         for byte in self.0 {
-            write!(f, "\\x{:02x}", byte)?;
+            write!(f, "\\x{byte:02x}")?;
         }
         write!(f, "\").as_bytes() at offset {}", self.1)
     }
@@ -862,14 +866,14 @@ pub enum Variant {
 impl fmt::Display for Variant {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::U8(value) => write!(f, "{}", value),
-            Self::U16(value) => write!(f, "{}", value),
-            Self::U32(value) => write!(f, "{}", value),
-            Self::U64(value) => write!(f, "{}", value),
-            Self::I8(value) => write!(f, "{}", value),
-            Self::I16(value) => write!(f, "{}", value),
-            Self::I32(value) => write!(f, "{}", value),
-            Self::I64(value) => write!(f, "{}", value),
+            Self::U8(value) => write!(f, "{value}"),
+            Self::U16(value) => write!(f, "{value}"),
+            Self::U32(value) => write!(f, "{value}"),
+            Self::U64(value) => write!(f, "{value}"),
+            Self::I8(value) => write!(f, "{value}"),
+            Self::I16(value) => write!(f, "{value}"),
+            Self::I32(value) => write!(f, "{value}"),
+            Self::I64(value) => write!(f, "{value}"),
         }
     }
 }
@@ -918,18 +922,21 @@ impl fmt::Display for RawString<'_> {
 impl<'b> RawString<'b> {
     /// Return the raw bytes of this string, as found in the PDB file.
     #[inline]
+    #[must_use]
     pub fn as_bytes(&self) -> &'b [u8] {
         self.0
     }
 
     /// Return the length of this string in bytes.
     #[inline]
+    #[must_use]
     pub fn len(&self) -> usize {
         self.0.len()
     }
 
     /// Returns a boolean indicating if this string is empty.
     #[inline]
+    #[must_use]
     pub fn is_empty(&self) -> bool {
         self.0.len() == 0
     }
@@ -940,6 +947,7 @@ impl<'b> RawString<'b> {
     /// string was valid UTF-8. This is the expected case for strings that appear in PDB files,
     /// since they are almost always composed of printable 7-bit ASCII characters.
     #[inline]
+    #[must_use]
     pub fn to_string(&self) -> Cow<'b, str> {
         String::from_utf8_lossy(self.0)
     }
@@ -1234,13 +1242,13 @@ mod tests {
         #[test]
         fn test_format_newtype() {
             let val = SymbolIndex(0x42);
-            assert_eq!(format!("{}", val), "0x42");
+            assert_eq!(format!("{val}"), "0x42");
         }
 
         #[test]
         fn test_debug_newtype() {
             let val = SymbolIndex(0x42);
-            assert_eq!(format!("{:?}", val), "SymbolIndex(0x42)");
+            assert_eq!(format!("{val:?}"), "SymbolIndex(0x42)");
         }
 
         #[test]

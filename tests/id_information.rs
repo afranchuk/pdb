@@ -1,4 +1,4 @@
-//! Tests that IdInformation works on files where the IPI is missing (empty stream).
+//! Tests that `IdInformation` works on files where the IPI is missing (empty stream).
 
 use pdb2 as pdb;
 

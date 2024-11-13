@@ -58,7 +58,7 @@ fn count_symbols() {
 
         println!("symbol counts by kind:");
         for (kind, count) in &map {
-            println!("  - kind: 0x{:04x}, count: {}", kind, count);
+            println!("  - kind: 0x{kind:04x}, count: {count}");
         }
 
         assert!(*map.get(&0x1107).expect("0x1107") >= 500);

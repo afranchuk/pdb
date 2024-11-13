@@ -38,7 +38,7 @@ pub enum IdData<'t> {
     UserDefinedTypeSource(UserDefinedTypeSourceId),
 }
 
-impl<'t> IdData<'t> {}
+impl IdData<'_> {}
 
 impl<'t> TryFromCtx<'t, scroll::Endian> for IdData<'t> {
     type Error = Error;

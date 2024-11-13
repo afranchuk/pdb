@@ -148,6 +148,7 @@ where
     }
 
     /// Returns an iterator that can traverse the type table in sequential order.
+    #[must_use]
     pub fn iter(&self) -> ItemIter<'_, I> {
         // get a parse buffer
         let mut buf = self.stream.parse_buffer();
@@ -169,11 +170,13 @@ where
     /// Note that in the case of the type stream ([`TypeInformation`]) primitive types are not
     /// stored in the PDB file. The number of distinct types reachable via this table will be higher
     /// than `len()`.
+    #[must_use]
     pub fn len(&self) -> usize {
         (self.header.maximum_index - self.header.minimum_index) as usize
     }
 
     /// Returns whether this `ItemInformation` contains any data.
+    #[must_use]
     pub fn is_empty(&self) -> bool {
         self.len() == 0
     }
@@ -183,6 +186,7 @@ where
     ///
     /// The `ItemFinder` is initially empty and must be populated by iterating. See the struct-level
     /// docs for an example.
+    #[must_use]
     pub fn finder(&self) -> ItemFinder<'_, I> {
         ItemFinder::new(self, 3)
     }
@@ -211,7 +215,7 @@ pub struct Item<'t, I> {
     data: &'t [u8],
 }
 
-impl<'t, I> Item<'t, I>
+impl<I> Item<'_, I>
 where
     I: ItemIndex,
 {
@@ -248,7 +252,7 @@ where
     }
 }
 
-impl<'t, I> fmt::Debug for Item<'t, I>
+impl<I> fmt::Debug for Item<'_, I>
 where
     I: ItemIndex,
 {
@@ -365,6 +369,7 @@ where
     /// reference lower indexes. However, when loading items referenced by the symbols stream, this
     /// can be useful to check whether iteration is required.
     #[inline]
+    #[must_use]
     pub fn max_index(&self) -> I {
         I::from(match self.positions.len() {
             0 => 0, // special case for an empty type index
@@ -381,7 +386,7 @@ where
         let (vec_index, iteration_count) = self.resolve(iterator.index);
         if iteration_count == 0 && vec_index == self.positions.len() {
             let pos = iterator.buf.pos();
-            assert!(pos < u32::max_value() as usize);
+            assert!(pos < u32::MAX as usize);
             self.positions.push(pos as u32);
         }
     }

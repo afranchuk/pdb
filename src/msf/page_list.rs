@@ -19,7 +19,7 @@ pub struct PageList {
 }
 
 impl PageList {
-    /// Create a new PageList for a given page size.
+    /// Create a new `PageList` for a given page size.
     pub fn new(page_size: usize) -> Self {
         Self {
             page_size,
@@ -29,7 +29,7 @@ impl PageList {
         }
     }
 
-    /// Add a page to the PageList. If this page number is sequential with the previous page number,
+    /// Add a page to the `PageList`. If this page number is sequential with the previous page number,
     /// it will be combined into the previous `SourceSlice` for efficiency.
     pub fn push(&mut self, page: PageNumber) {
         assert!(!self.truncated);
@@ -85,12 +85,12 @@ impl PageList {
         self.truncated = true;
     }
 
-    /// Return the total length of this PageList.
+    /// Return the total length of this `PageList`.
     pub fn len(&self) -> usize {
         self.source_slices.iter().fold(0, |acc, s| acc + s.size)
     }
 
-    /// Return a slice of SourceSlices.
+    /// Return a slice of `SourceSlices`.
     pub fn source_slices(&self) -> &[SourceSlice] {
         self.source_slices.as_slice()
     }
