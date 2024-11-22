@@ -7,18 +7,21 @@
 
 use fallible_iterator::FallibleIterator;
 
-use crate::{common::*, SectionCharacteristics};
-use crate::dbi::{DBIExtraStreams, DBIHeader, DebugInformation, Module};
+use crate::dbi::{
+    DBIExtraStreams, DBIHeader, DBISectionMapItemFlag, DBISectionMapItemSectionType,
+    DebugInformation, Module,
+};
 use crate::framedata::FrameTable;
 use crate::modi::ModuleInfo;
 use crate::msf::{self, Msf, Stream};
 use crate::omap::{AddressMap, OMAPTable};
 use crate::pdbi::PDBInformation;
-use crate::pe::ImageSectionHeader;
+use crate::pe::{self, ImageSectionHeader};
 use crate::source::Source;
 use crate::strings::StringTable;
 use crate::symbol::SymbolTable;
 use crate::tpi::{IdInformation, TypeInformation};
+use crate::{common::*, SectionCharacteristics};
 
 // Some streams have a fixed stream index.
 // http://llvm.org/docs/PDB/index.html
@@ -270,18 +273,17 @@ impl<'s, S: Source<'s> + 's> PDB<'s, S> {
     // If there are no section_headers in the file, attempt to synthesize sections
     // based on the section map. This seems to be necessary to handle NGEN-generated PDB
     // files (.ni.pdb from Crossgen2).
-    fn maybe_synthesize_section(&mut self) -> Result<Option<Vec<ImageSectionHeader>>>
-    {
+    fn maybe_synthesize_section(&mut self) -> Result<Option<Vec<ImageSectionHeader>>> {
         // If we have OMAP From data, I don't believe we can do this, because the RVAs
         // won't map. But I'm not 100% sure of that, be conservative.
         if self.omap_from_src()?.is_some() {
-            return Ok(None)
+            return Ok(None);
         }
 
         let debug_info = self.debug_information()?;
         let sec_map = debug_info.section_map()?;
         if sec_map.sec_count != sec_map.sec_count_log {
-            return Ok(None)
+            return Ok(None);
         }
         let sec_map = sec_map.collect::<Vec<_>>()?;
 
@@ -290,20 +292,20 @@ impl<'s, S: Source<'s> + 's> PDB<'s, S> {
         .filter(|sm| {
             // the section with a bogus section length also doesn't have any rwx flags,
             // and has section_type == 2
-            sm.section_type == 1 && // "SEL" section, not ABS (0x2) or GROUP (0x10)
+            sm.section_type == DBISectionMapItemSectionType::Sel as u8 &&
             sm.section_length != u32::MAX // shouldn't happen, but just in case
         })
         .map(|sm| {
             let mut characteristics = 0u32;
-            if sm.flags & 0x1 != 0 { // R
-                characteristics |= 0x40000000; // IMAGE_SCN_MEM_READ
+            if sm.flags & DBISectionMapItemFlag::Read as u8 != 0 {
+                characteristics |= pe::IMAGE_SCN_MEM_READ;
             }
-            if sm.flags & 0x2 != 0 { // W
-                characteristics |= 0x80000000; // IMAGE_SCN_MEM_WRITE
+            if sm.flags & DBISectionMapItemFlag::Write as u8 != 0 {
+                characteristics |= pe::IMAGE_SCN_MEM_WRITE;
             }
-            if sm.flags & 0x4 != 0 { // X
-                characteristics |= 0x20000000; // IMAGE_SCN_MEM_EXECUTE
-                characteristics |= 0x20; // IMAGE_SCN_CNT_CODE
+            if sm.flags & DBISectionMapItemFlag::Execute as u8 != 0 {
+                characteristics |= pe::IMAGE_SCN_MEM_EXECUTE;
+                characteristics |= pe::IMAGE_SCN_CNT_CODE;
             }
 
             if sm.rva_offset != 0 {

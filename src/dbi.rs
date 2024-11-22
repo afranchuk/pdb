@@ -112,9 +112,9 @@ impl<'s> DebugInformation<'s> {
     pub fn section_map(&self) -> Result<DBISectionMapIter<'_>> {
         let mut buf = self.stream.parse_buffer();
         // drop the header, modules list, and section contributions list
-        let offset = self.header_len +
-            self.header.module_list_size as usize +
-            self.header.section_contribution_size as usize;
+        let offset = self.header_len
+            + self.header.module_list_size as usize
+            + self.header.section_contribution_size as usize;
 
         buf.take(offset)?;
         let section_map_buf = buf.take(self.header.section_map_size as usize)?;
@@ -623,6 +623,31 @@ pub struct DBISectionMapItem {
     pub section_length: u32,
 }
 
+/// Section flag values for the `DBISectionMapItem::flags` field.
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
+#[repr(u8)]
+pub enum DBISectionMapItemFlag {
+    /// Read access
+    Read = 1 << 0,
+    /// Write access
+    Write = 1 << 1,
+    /// Execute access
+    Execute = 1 << 2,
+    /// 32-bit section
+    ThirtyTwoBit = 1 << 3,
+}
+
+/// Section type values for the `DBISectionMapItem::flags` field.
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
+#[repr(u8)]
+pub enum DBISectionMapItemSectionType {
+    /// Section type SEL
+    Sel = 1 << 0,
+    /// Section type ABS
+    Abs = 1 << 1,
+    /// Section type GROUP
+    Group = 1 << 4,
+}
 
 impl DBISectionMapItem {
     fn parse(buf: &mut ParseBuffer<'_>) -> Result<Self> {
@@ -655,7 +680,11 @@ impl<'c> DBISectionMapIter<'c> {
         let sec_count = buf.parse_u16()?;
         let sec_count_log = buf.parse_u16()?;
 
-        Ok(Self { buf, sec_count, sec_count_log })
+        Ok(Self {
+            buf,
+            sec_count,
+            sec_count_log,
+        })
     }
 }
 

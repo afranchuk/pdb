@@ -20,7 +20,7 @@ use crate::common::*;
 /// obsolete and is replaced by `IMAGE_SCN_ALIGN_1BYTES`.
 const IMAGE_SCN_TYPE_NO_PAD: u32 = 0x00000008;
 /// The section contains executable code.
-const IMAGE_SCN_CNT_CODE: u32 = 0x00000020;
+pub const IMAGE_SCN_CNT_CODE: u32 = 0x00000020;
 /// The section contains initialized data.
 const IMAGE_SCN_CNT_INITIALIZED_DATA: u32 = 0x00000040;
 /// The section contains uninitialized data.
@@ -87,11 +87,11 @@ const IMAGE_SCN_MEM_NOT_PAGED: u32 = 0x08000000;
 /// The section can be shared in memory.
 const IMAGE_SCN_MEM_SHARED: u32 = 0x10000000;
 /// The section can be executed as code.
-const IMAGE_SCN_MEM_EXECUTE: u32 = 0x20000000;
+pub const IMAGE_SCN_MEM_EXECUTE: u32 = 0x20000000;
 /// The section can be read.
-const IMAGE_SCN_MEM_READ: u32 = 0x40000000;
+pub const IMAGE_SCN_MEM_READ: u32 = 0x40000000;
 /// The section can be written to.
-const IMAGE_SCN_MEM_WRITE: u32 = 0x80000000;
+pub const IMAGE_SCN_MEM_WRITE: u32 = 0x80000000;
 
 /// Characteristic flags of an [`ImageSectionHeader`].
 ///
