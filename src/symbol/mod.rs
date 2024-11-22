@@ -12,6 +12,7 @@ use scroll::{ctx::TryFromCtx, Endian, Pread, LE};
 use crate::common::*;
 use crate::msf::*;
 use crate::FallibleIterator;
+use crate::SectionCharacteristics;
 
 mod annotations;
 mod constants;
@@ -521,12 +522,19 @@ impl<'t> TryFromCtx<'t, SymbolKind> for ProcedureReferenceSymbol<'t> {
     fn try_from_ctx(this: &'t [u8], kind: SymbolKind) -> Result<(Self, usize)> {
         let mut buf = ParseBuffer::from(this);
 
+        let global = matches!(kind, S_PROCREF | S_PROCREF_ST);
+        let sum_name = buf.parse()?;
+        let symbol_index = buf.parse()?;
+        // 1-based module index in the input - presumably 0 means invalid / not present
+        let module = buf.parse::<u16>()?.checked_sub(1).map(usize::from);
+        let name = parse_optional_name(&mut buf, kind)?;
+
         let symbol = ProcedureReferenceSymbol {
-            global: matches!(kind, S_PROCREF | S_PROCREF_ST),
-            sum_name: buf.parse()?,
-            symbol_index: buf.parse()?,
-            module: buf.parse::<u16>()?.checked_sub(1).map(usize::from),
-            name: parse_optional_name(&mut buf, kind)?,
+            global,
+            sum_name,
+            symbol_index,
+            module,
+            name,
         };
 
         Ok((symbol, buf.pos()))
@@ -557,11 +565,17 @@ impl<'t> TryFromCtx<'t, SymbolKind> for DataReferenceSymbol<'t> {
     fn try_from_ctx(this: &'t [u8], kind: SymbolKind) -> Result<(Self, usize)> {
         let mut buf = ParseBuffer::from(this);
 
+        let sum_name = buf.parse()?;
+        let symbol_index = buf.parse()?;
+        // 1-based module index in the input - presumably 0 means invalid / not present
+        let module = buf.parse::<u16>()?.checked_sub(1).map(usize::from);
+        let name = parse_optional_name(&mut buf, kind)?;
+
         let symbol = DataReferenceSymbol {
-            sum_name: buf.parse()?,
-            symbol_index: buf.parse()?,
-            module: buf.parse::<u16>()?.checked_sub(1).map(usize::from),
-            name: parse_optional_name(&mut buf, kind)?,
+            sum_name,
+            symbol_index,
+            module,
+            name,
         };
 
         Ok((symbol, buf.pos()))
@@ -592,11 +606,17 @@ impl<'t> TryFromCtx<'t, SymbolKind> for AnnotationReferenceSymbol<'t> {
     fn try_from_ctx(this: &'t [u8], kind: SymbolKind) -> Result<(Self, usize)> {
         let mut buf = ParseBuffer::from(this);
 
+        let sum_name = buf.parse()?;
+        let symbol_index = buf.parse()?;
+        // 1-based module index in the input - presumably 0 means invalid / not present
+        let module = buf.parse::<u16>()?.checked_sub(1).map(usize::from);
+        let name = parse_symbol_name(&mut buf, kind)?;
+
         let symbol = AnnotationReferenceSymbol {
-            sum_name: buf.parse()?,
-            symbol_index: buf.parse()?,
-            module: buf.parse::<u16>()?.checked_sub(1).map(usize::from),
-            name: parse_symbol_name(&mut buf, kind)?,
+            sum_name,
+            symbol_index,
+            module,
+            name,
         };
 
         Ok((symbol, buf.pos()))
@@ -621,17 +641,23 @@ pub struct TokenReferenceSymbol<'t> {
     pub name: RawString<'t>,
 }
 
-impl<'t> TryFromCtx<'t, SymbolKind> for TokenReferenceSymbol <'t> {
+impl<'t> TryFromCtx<'t, SymbolKind> for TokenReferenceSymbol<'t> {
     type Error = Error;
 
     fn try_from_ctx(this: &'t [u8], kind: SymbolKind) -> Result<(Self, usize)> {
         let mut buf = ParseBuffer::from(this);
 
+        let sum_name = buf.parse()?;
+        let symbol_index = buf.parse()?;
+        // 1-based module index in the input - presumably 0 means invalid / not present
+        let module = buf.parse::<u16>()?.checked_sub(1).map(usize::from);
+        let name = parse_symbol_name(&mut buf, kind)?;
+
         let symbol = TokenReferenceSymbol {
-            sum_name: buf.parse()?,
-            symbol_index: buf.parse()?,
-            module: buf.parse::<u16>()?.checked_sub(1).map(usize::from),
-            name: parse_symbol_name(&mut buf, kind)?,
+            sum_name,
+            symbol_index,
+            module,
+            name,
         };
 
         Ok((symbol, buf.pos()))
@@ -904,11 +930,11 @@ impl<'t> TryFromCtx<'t, SymbolKind> for ProcedureSymbol<'t> {
 }
 
 /// A managed procedure, such as a function or method.
-/// 
+///
 /// Symbol kinds:
 /// - `S_GMANPROC`, `S_GMANPROCIA64` for global procedures
 /// - `S_LMANPROC`, `S_LMANPROCIA64` for local procedures
-/// 
+///
 /// `S_GMANPROCIA64` and `S_LMANPROCIA64` are only mentioned, there is no available source.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct ManagedProcedureSymbol<'t> {
@@ -1293,7 +1319,7 @@ impl<'t> TryFromCtx<'t, SymbolKind> for LocalSymbol<'t> {
 }
 
 /// A managed local variable slot.
-/// 
+///
 /// Symbol kind `S_MANSLOT`.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct ManagedSlotSymbol<'t> {
@@ -1658,7 +1684,7 @@ impl<'t> TryFromCtx<'t, SymbolKind> for SeparatedCodeSymbol {
 }
 
 /// An OEM symbol.
-/// 
+///
 /// Symbol kind `S_OEM`.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct OemSymbol<'t> {
@@ -1667,7 +1693,7 @@ pub struct OemSymbol<'t> {
     /// Type index.
     pub type_index: TypeIndex,
     /// User data with forced 4B-alignment.
-    /// 
+    ///
     /// An array of variable size, currently only the first 4B are parsed.
     pub rgl: u32,
 }
@@ -1699,7 +1725,7 @@ pub struct EnvBlockSymbol<'t> {
     pub rgsz: Vec<RawString<'t>>,
 }
 
-impl<'t> TryFromCtx<'t, SymbolKind> for EnvBlockSymbol <'t> {
+impl<'t> TryFromCtx<'t, SymbolKind> for EnvBlockSymbol<'t> {
     type Error = Error;
 
     fn try_from_ctx(this: &'t [u8], kind: SymbolKind) -> Result<(Self, usize)> {
@@ -1737,13 +1763,12 @@ pub struct SectionSymbol<'t> {
     /// Section's CB.
     pub cb: u32,
     /// Section characteristics.
-    pub characteristics: u32,
+    pub characteristics: SectionCharacteristics,
     /// Section name.
-    pub name: RawString<'t>
-
+    pub name: RawString<'t>,
 }
 
-impl<'t> TryFromCtx<'t, SymbolKind> for SectionSymbol <'t> {
+impl<'t> TryFromCtx<'t, SymbolKind> for SectionSymbol<'t> {
     type Error = Error;
 
     fn try_from_ctx(this: &'t [u8], kind: SymbolKind) -> Result<(Self, usize)> {
@@ -1756,7 +1781,7 @@ impl<'t> TryFromCtx<'t, SymbolKind> for SectionSymbol <'t> {
             rva: buf.parse()?,
             cb: buf.parse()?,
             characteristics: buf.parse()?,
-            name: parse_symbol_name(&mut buf, kind)?
+            name: parse_symbol_name(&mut buf, kind)?,
         };
 
         Ok((symbol, buf.pos()))
@@ -1765,7 +1790,7 @@ impl<'t> TryFromCtx<'t, SymbolKind> for SectionSymbol <'t> {
 
 /// A COFF section in a PE executable.
 ///
-/// Symbol kind `S_SECTION`.
+/// Symbol kind `S_COFFGROUP`.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct CoffGroupSymbol<'t> {
     /// COFF group's CB.
@@ -1774,14 +1799,11 @@ pub struct CoffGroupSymbol<'t> {
     pub characteristics: u32,
     /// Symbol offset.
     pub offset: PdbInternalSectionOffset,
-    /// Symbol segment.
-    pub segment: u16,    
     /// COFF group name.
-    pub name: RawString<'t>
-
+    pub name: RawString<'t>,
 }
 
-impl<'t> TryFromCtx<'t, SymbolKind> for CoffGroupSymbol <'t> {
+impl<'t> TryFromCtx<'t, SymbolKind> for CoffGroupSymbol<'t> {
     type Error = Error;
 
     fn try_from_ctx(this: &'t [u8], kind: SymbolKind) -> Result<(Self, usize)> {
@@ -1791,8 +1813,7 @@ impl<'t> TryFromCtx<'t, SymbolKind> for CoffGroupSymbol <'t> {
             cb: buf.parse()?,
             characteristics: buf.parse()?,
             offset: buf.parse()?,
-            segment: buf.parse()?,
-            name: parse_symbol_name(&mut buf, kind)?
+            name: parse_symbol_name(&mut buf, kind)?,
         };
 
         Ok((symbol, buf.pos()))
@@ -2464,6 +2485,32 @@ mod tests {
                         section: 0x1,
                         offset: 0x4338
                     }
+                })
+            );
+        }
+
+        #[test]
+        fn kind_1137() {
+            // 0x1137 is S_COFFGROUP
+            let data = &[
+                55, 17, 160, 17, 0, 0, 64, 0, 0, 192, 0, 0, 0, 0, 3, 0, 46, 100, 97, 116, 97, 0,
+            ];
+
+            let symbol = Symbol {
+                data,
+                index: SymbolIndex(0),
+            };
+            assert_eq!(symbol.raw_kind(), 0x1137);
+            assert_eq!(
+                symbol.parse().expect("parse"),
+                SymbolData::CoffGroup(CoffGroupSymbol {
+                    cb: 4512,
+                    characteristics: 0xc000_0040,
+                    offset: PdbInternalSectionOffset {
+                        section: 0x3,
+                        offset: 0
+                    },
+                    name: ".data".into(),
                 })
             );
         }

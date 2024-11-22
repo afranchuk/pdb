@@ -599,8 +599,8 @@ impl From<u8> for SourceLanguage {
             0x12 => Self::ObjCXX,
             0x13 => Self::Swift,
             0x14 => Self::AliasObj,
-            0x16 => Self::Rust,
-            0x17 => Self::Go,
+            0x15 => Self::Rust,
+            0x16 => Self::Go,
             0x44 => Self::D,
             _ => Self::Masm, // There is no unknown, so we just force to Masm as the default.
         }
