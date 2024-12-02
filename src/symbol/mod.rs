@@ -261,6 +261,10 @@ pub enum SymbolData<'t> {
     FrameProcedure(FrameProcedureSymbol),
     /// Indirect call site information.
     CallSiteInfo(CallSiteInfoSymbol),
+    /// Callers of a function.
+    Callers(FunctionListSymbol),
+    /// Callees of a function.
+    Callees(FunctionListSymbol),
 }
 
 impl<'t> SymbolData<'t> {
@@ -311,7 +315,9 @@ impl<'t> SymbolData<'t> {
             | Self::DefRangeSubFieldRegister(_)
             | Self::DefRangeRegisterRelative(_)
             | Self::FrameProcedure(_)
-            | Self::CallSiteInfo(_) => None,
+            | Self::CallSiteInfo(_)
+            | Self::Callers(_)
+            | Self::Callees(_) => None,
         }
     }
 }
@@ -390,6 +396,8 @@ impl<'t> TryFromCtx<'t> for SymbolData<'t> {
             }
             S_FRAMEPROC => SymbolData::FrameProcedure(buf.parse_with(kind)?),
             S_CALLSITEINFO => SymbolData::CallSiteInfo(buf.parse_with(kind)?),
+            S_CALLERS => SymbolData::Callers(buf.parse_with(kind)?),
+            S_CALLEES => SymbolData::Callees(buf.parse_with(kind)?),
             other => return Err(Error::UnimplementedSymbolKind(other)),
         };
 
@@ -2416,6 +2424,41 @@ impl TryFromCtx<'_, SymbolKind> for CallSiteInfoSymbol {
     }
 }
 
+/// A list of functions and their invocation counts.
+///
+/// Symbol kind `S_CALLEES` or `S_CALLERS`.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct FunctionListSymbol {
+    /// The list of function indices.
+    functions: Vec<TypeIndex>,
+    /// The list of invocation counts.
+    invocations: Vec<u32>,
+}
+
+impl<'t> TryFromCtx<'t, SymbolKind> for FunctionListSymbol {
+    type Error = Error;
+    fn try_from_ctx(this: &'t [u8], _kind: SymbolKind) -> Result<(Self, usize)> {
+        let mut buf = ParseBuffer::from(this);
+        let count: u32 = buf.parse()?;
+        let functions = vec![buf.parse()?; count as usize];
+
+        // the function list is followed by a parallel list of invocation counts.
+        // non-existent counts are implicitly zero.
+        let mut invocations = Vec::new();
+        while !buf.is_empty() {
+            invocations.push(buf.parse()?);
+        }
+        debug_assert!(invocations.len() <= functions.len());
+        invocations.resize(functions.len(), 0);
+
+        let symbol = FunctionListSymbol {
+            functions,
+            invocations,
+        };
+        Ok((symbol, buf.pos()))
+    }
+}
+
 /// PDB symbol tables contain names, locations, and metadata about functions, global/static data,
 /// constants, data types, and more.
 ///
@@ -3267,6 +3310,7 @@ mod tests {
             assert_eq!(symbol.parse().expect("parse"), SymbolData::InlineSiteEnd);
         }
 
+        // S_DEFRANGE_REGISTER - 0x1141
         #[test]
         fn kind_1141() {
             let data = &[65, 17, 17, 0, 0, 0, 70, 40, 0, 0, 1, 0, 66, 0, 44, 0, 19, 0];
@@ -3315,6 +3359,76 @@ mod tests {
                         cb_range: 2,
                     },
                     gaps: vec![]
+                })
+            );
+        }
+
+        // S_FRAMEPROC - 0x1012
+        #[test]
+        fn kind_1012() {
+            let data = &[
+                18, 16, 152, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 48,
+                160, 2, 0, 0, 0,
+            ];
+            let symbol = Symbol {
+                data,
+                index: SymbolIndex(0),
+            };
+            assert_eq!(symbol.raw_kind(), 0x1012);
+            assert_eq!(
+                symbol.parse().expect("parse"),
+                SymbolData::FrameProcedure(FrameProcedureSymbol {
+                    frame_byte_count: 152,
+                    padding_byte_count: 0,
+                    offset_padding: 0,
+                    callee_save_registers_byte_count: 0,
+                    exception_handler_offset: PdbInternalSectionOffset {
+                        section: 0x0,
+                        offset: 0x0
+                    },
+                    flags: FrameProcedureFlags {
+                        has_alloca: false,
+                        has_setjmp: false,
+                        has_longjmp: false,
+                        has_inline_asm: false,
+                        has_eh: true,
+                        inline_spec: true,
+                        has_seh: false,
+                        naked: false,
+                        security_checks: false,
+                        async_eh: false,
+                        gs_no_stack_ordering: false,
+                        was_inlined: false,
+                        gs_check: false,
+                        safe_buffers: true,
+                        encoded_local_base_pointer: 2,
+                        encoded_param_base_pointer: 2,
+                        pogo_on: false,
+                        valid_counts: false,
+                        opt_speed: false,
+                        guard_cf: false,
+                        guard_cfw: false,
+                    },
+                })
+            );
+        }
+
+        // S_CALLEES - 0x115a
+        #[test]
+        fn kind_115a() {
+            let data = &[
+                90, 17, 3, 0, 0, 0, 191, 72, 0, 0, 192, 72, 0, 0, 193, 72, 0, 0,
+            ];
+            let symbol = Symbol {
+                data,
+                index: SymbolIndex(0),
+            };
+            assert_eq!(symbol.raw_kind(), 0x115a);
+            assert_eq!(
+                symbol.parse().expect("parse"),
+                SymbolData::Callees(FunctionListSymbol {
+                    functions: vec![TypeIndex(0x48bf), TypeIndex(0x48bf), TypeIndex(0x48bf)],
+                    invocations: vec![18624, 18625, 0]
                 })
             );
         }
