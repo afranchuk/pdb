@@ -419,7 +419,10 @@ pub(crate) fn parse_type_data<'t>(buf: &mut ParseBuffer<'t>) -> Result<TypeData<
                 match buf.peek_u16()? {
                     LF_INDEX => {
                         // continuation record
-                        // eat the leaf value
+                        // eat the leaf value, which we just peeked at
+                        buf.parse_u16()?;
+
+                        // eat another u16, which is padding (always 0 in files produced by MSVC)
                         buf.parse_u16()?;
 
                         // parse the TypeIndex where we continue
