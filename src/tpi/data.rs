@@ -25,6 +25,8 @@ pub enum TypeData<'t> {
     Nested(NestedType<'t>),
     BaseClass(BaseClassType),
     VirtualBaseClass(VirtualBaseClassType),
+    VirtualFunctionTable(VirtualFunctionTableType<'t>),
+    VirtualTableShape(VirtualTableShapeType),
     VirtualFunctionTablePointer(VirtualFunctionTablePointerType),
     Procedure(ProcedureType),
     Pointer(PointerType),
@@ -33,6 +35,7 @@ pub enum TypeData<'t> {
     Enumerate(EnumerateType<'t>),
     Array(ArrayType),
     Union(UnionType<'t>),
+    Alias(AliasType<'t>),
     Bitfield(BitfieldType),
     FieldList(FieldList<'t>),
     ArgumentList(ArgumentList),
@@ -50,7 +53,8 @@ impl<'t> TypeData<'t> {
             | Self::Nested(NestedType { ref name, .. })
             | Self::Enumeration(EnumerationType { ref name, .. })
             | Self::Enumerate(EnumerateType { ref name, .. })
-            | Self::Union(UnionType { ref name, .. }) => name,
+            | Self::Union(UnionType { ref name, .. })
+            | Self::Alias(AliasType { ref name, .. }) => name,
             _ => return None,
         };
 
@@ -166,7 +170,7 @@ pub(crate) fn parse_type_data<'t>(buf: &mut ParseBuffer<'t>) -> Result<TypeData<
                 attributes: attr,
                 method_type: buf.parse()?,
                 vtable_offset: if attr.is_intro_virtual() {
-                    Some(buf.parse_u32()? as u32)
+                    Some(buf.parse_u32()?)
                 } else {
                     // yes, this is variable length
                     None
@@ -336,6 +340,12 @@ pub(crate) fn parse_type_data<'t>(buf: &mut ParseBuffer<'t>) -> Result<TypeData<
             Ok(TypeData::Union(union))
         }
 
+        // https://github.com/Microsoft/microsoft-pdb/blob/082c5290e5aff028ae84e43affa8be717aa7af73/include/cvinfo.h#L1669-L1673
+        LF_ALIAS | LF_ALIAS_ST => Ok(TypeData::Alias(AliasType {
+            underlying_type: buf.parse()?,
+            name: parse_string(leaf, buf)?,
+        })),
+
         // https://github.com/Microsoft/microsoft-pdb/blob/082c5290e5aff028ae84e43affa8be717aa7af73/include/cvinfo.h#L2164-L2170
         LF_BITFIELD => Ok(TypeData::Bitfield(BitfieldType {
             underlying_type: buf.parse()?,
@@ -345,14 +355,46 @@ pub(crate) fn parse_type_data<'t>(buf: &mut ParseBuffer<'t>) -> Result<TypeData<
 
         // https://github.com/Microsoft/microsoft-pdb/blob/082c5290e5aff028ae84e43affa8be717aa7af73/include/cvinfo.h#L1819-L1823
         LF_VTSHAPE => {
-            // TODO
-            Err(Error::UnimplementedTypeKind(leaf))
+            let mut vtshape = VirtualTableShapeType {
+                descriptors: vec![],
+            };
+            let count = buf.parse_u16()? as usize;
+            // These are packed 4-bit values
+            for _ in 0..((count + 1) / 2) {
+                let desc: u8 = buf.parse()?;
+
+                vtshape
+                    .descriptors
+                    .push(VirtualTableShapeDescriptor::from_u4(desc & 0xF));
+                if vtshape.descriptors.len() < count {
+                    vtshape
+                        .descriptors
+                        .push(VirtualTableShapeDescriptor::from_u4(desc >> 4));
+                }
+            }
+            Ok(TypeData::VirtualTableShape(vtshape))
         }
 
         // https://github.com/Microsoft/microsoft-pdb/blob/082c5290e5aff028ae84e43affa8be717aa7af73/include/cvinfo.h#L1825-L1837
         LF_VFTABLE => {
-            // TODO
-            Err(Error::UnimplementedTypeKind(leaf))
+            let mut vftable = VirtualFunctionTableType {
+                owner: buf.parse()?,
+                base: buf.parse()?,
+                object_offset: parse_unsigned(buf)? as u32,
+                names: vec![],
+            };
+
+            let names_length = parse_unsigned(buf)? as usize;
+
+            let mut len = 0;
+            while len < names_length {
+                let s = buf.parse_cstring()?;
+                len += s.len() + 1;
+                vftable.names.push(s);
+            }
+            assert_eq!(len, names_length);
+
+            Ok(TypeData::VirtualFunctionTable(vftable))
         }
 
         // https://github.com/Microsoft/microsoft-pdb/blob/082c5290e5aff028ae84e43affa8be717aa7af73/include/cvinfo.h#L2521-L2528
@@ -627,6 +669,31 @@ impl FieldAttributes {
         matches!(self.method_properties(), 0x04 | 0x06)
     }
 
+    #[inline]
+    pub fn is_pseudo(self) -> bool {
+        self.0 & 0x0020 != 0
+    }
+
+    #[inline]
+    pub fn noinherit(self) -> bool {
+        self.0 & 0x0040 != 0
+    }
+
+    #[inline]
+    pub fn noconstruct(self) -> bool {
+        self.0 & 0x0080 != 0
+    }
+
+    #[inline]
+    pub fn is_compgenx(self) -> bool {
+        self.0 & 0x0100 != 0
+    }
+
+    #[inline]
+    pub fn sealed(self) -> bool {
+        self.0 & 0x0200 != 0
+    }
+
     // TODO
 }
 
@@ -826,6 +893,51 @@ impl PointerAttributes {
     }
 }
 
+/*
+typedef enum CV_VTS_desc_e {
+    CV_VTS_near         = 0x00,
+    CV_VTS_far          = 0x01,
+    CV_VTS_thin         = 0x02,
+    CV_VTS_outer        = 0x03,
+    CV_VTS_meta         = 0x04,
+    CV_VTS_near32       = 0x05,
+    CV_VTS_far32        = 0x06,
+    CV_VTS_unused       = 0x07
+} CV_VTS_desc_e;
+ */
+#[allow(unused)]
+#[repr(u8)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+pub enum VirtualTableShapeDescriptor {
+    Near = 0x00,
+    Far = 0x01,
+    Thin = 0x02,
+    Outer = 0x03,
+    Meta = 0x04,
+    Near32 = 0x05,
+    Far32 = 0x06,
+    Unused = 0x07,
+}
+
+impl VirtualTableShapeDescriptor {
+    // Convert a 4-bit "u4" value in a u8 to a VirtualTableShapeDescriptor
+    // This is used in the VirtualTableShapeType parsing and is not public
+    // so we can safely assume that the value is in the correct range.
+    pub(crate) fn from_u4(val: u8) -> Self {
+        match val {
+            0x00 => VirtualTableShapeDescriptor::Near,
+            0x01 => VirtualTableShapeDescriptor::Far,
+            0x02 => VirtualTableShapeDescriptor::Thin,
+            0x03 => VirtualTableShapeDescriptor::Outer,
+            0x04 => VirtualTableShapeDescriptor::Meta,
+            0x05 => VirtualTableShapeDescriptor::Near32,
+            0x06 => VirtualTableShapeDescriptor::Far32,
+            0x07 => VirtualTableShapeDescriptor::Unused,
+            _ => unreachable!(),
+        }
+    }
+}
+
 /// The information parsed from a type record with kind
 /// `LF_CLASS`, `LF_CLASS_ST`, `LF_STRUCTURE`, `LF_STRUCTURE_ST` or `LF_INTERFACE`.
 // https://github.com/Microsoft/microsoft-pdb/blob/082c5290e5aff028ae84e43affa8be717aa7af73/include/cvinfo.h#L1631
@@ -947,6 +1059,21 @@ pub struct VirtualFunctionTablePointerType {
     pub table: TypeIndex,
 }
 
+/// The information parsed from a type record with kind `LF_VTSHAPE`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct VirtualTableShapeType {
+    pub descriptors: Vec<VirtualTableShapeDescriptor>,
+}
+
+/// The information parsed from a type record with kind `LF_VFTABLE`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct VirtualFunctionTableType<'t> {
+    pub owner: TypeIndex,
+    pub base: TypeIndex,
+    pub object_offset: u32,
+    pub names: Vec<RawString<'t>>,
+}
+
 /// The information parsed from a type record with kind `LF_PROCEDURE`.
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub struct ProcedureType {
@@ -1021,6 +1148,13 @@ pub struct UnionType<'t> {
     pub size: u64,
     pub name: RawString<'t>,
     pub unique_name: Option<RawString<'t>>,
+}
+
+/// The information parsed from a type record with kind `LF_ALIAS` or `LF_ALIAS_ST`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AliasType<'t> {
+    pub underlying_type: TypeIndex,
+    pub name: RawString<'t>,
 }
 
 /// The information parsed from a type record with kind `LF_BITFIELD`.
