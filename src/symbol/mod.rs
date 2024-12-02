@@ -271,6 +271,8 @@ pub enum SymbolData<'t> {
     ArmSwitchTable(ArmSwitchTableSymbol),
     /// Heap allocation site
     HeapAllocationSite(HeapAllocationSiteSymbol),
+    /// A security cookie on a stack frame
+    FrameCookie(FrameCookieSymbol),
 }
 
 impl<'t> SymbolData<'t> {
@@ -326,7 +328,8 @@ impl<'t> SymbolData<'t> {
             | Self::Callees(_)
             | Self::Inlinees(_)
             | Self::ArmSwitchTable(_)
-            | Self::HeapAllocationSite(_) => None,
+            | Self::HeapAllocationSite(_)
+            | Self::FrameCookie(_) => None,
         }
     }
 }
@@ -410,6 +413,7 @@ impl<'t> TryFromCtx<'t> for SymbolData<'t> {
             S_INLINEES => SymbolData::Inlinees(buf.parse_with(kind)?),
             S_ARMSWITCHTABLE => SymbolData::ArmSwitchTable(buf.parse_with(kind)?),
             S_HEAPALLOCSITE => SymbolData::HeapAllocationSite(buf.parse_with(kind)?),
+            S_FRAMECOOKIE => SymbolData::FrameCookie(buf.parse_with(kind)?),
             other => return Err(Error::UnimplementedSymbolKind(other)),
         };
 
@@ -2603,6 +2607,7 @@ impl<'t> TryFromCtx<'t, Endian> for JumpTableEntrySize {
     }
 }
 
+// https://github.com/microsoft/microsoft-pdb/blob/082c5290e5aff028ae84e43affa8be717aa7af73/include/cvinfo.h#L4500
 /// Description of a heap allocation site.
 ///
 /// Symbol kind `S_HEAPALLOCSITE`
@@ -2631,6 +2636,74 @@ impl<'t> TryFromCtx<'t, SymbolKind> for HeapAllocationSiteSymbol {
             type_index,
         };
         Ok((symbol, buf.pos()))
+    }
+}
+
+// https://github.com/microsoft/microsoft-pdb/blob/082c5290e5aff028ae84e43affa8be717aa7af73/include/cvinfo.h#L4522
+/// Description of a security cookie on a stack frame.
+///
+/// Symbol kind `S_FRAMECOOKIE`
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct FrameCookieSymbol {
+    /// Frame relative offset
+    pub offset: i32,
+    /// Register index
+    pub register: Register,
+    /// Cookie type
+    pub cookie_type: FrameCookieType,
+    /// Flags
+    pub flags: u8, // unknown interpretation
+}
+
+impl TryFromCtx<'_, SymbolKind> for FrameCookieSymbol {
+    type Error = Error;
+    fn try_from_ctx(this: &[u8], _kind: SymbolKind) -> Result<(Self, usize)> {
+        let mut buf = ParseBuffer::from(this);
+
+        let offset = buf.parse()?;
+        let register = buf.parse()?;
+        let cookie_type = buf.parse()?;
+        let flags = buf.parse()?;
+
+        let symbol = FrameCookieSymbol {
+            offset,
+            register,
+            cookie_type,
+            flags,
+        };
+        Ok((symbol, buf.pos()))
+    }
+}
+
+/// Construction of the security cookie value.
+#[derive(Clone, Debug, Eq, PartialEq)]
+#[repr(u8)]
+pub enum FrameCookieType {
+    /// Copy
+    Copy = 0,
+    /// Xor with stack pointer
+    XorStackPointer = 1,
+    /// Xor with base pointer
+    XorBasePointer = 2,
+    /// Xor with r13
+    XorR13 = 3,
+    /// Invalid value - only used for error handling.
+    Invalid(u8),
+}
+
+impl<'t> TryFromCtx<'t, Endian> for FrameCookieType {
+    type Error = Error;
+    fn try_from_ctx(this: &'t [u8], _le: Endian) -> Result<(Self, usize)> {
+        let mut buf = ParseBuffer::from(this);
+        let value = buf.parse::<u8>()?;
+        let cookie_type = match value {
+            0 => Self::Copy,
+            1 => Self::XorStackPointer,
+            2 => Self::XorBasePointer,
+            3 => Self::XorR13,
+            _ => Self::Invalid(value),
+        };
+        Ok((cookie_type, buf.pos()))
     }
 }
 
@@ -3350,6 +3423,26 @@ mod tests {
                         offset: 0x87b86
                     },
                     type_index: TypeIndex(0x5b11)
+                })
+            );
+        }
+
+        // S_FRAMECOOKIE - 0x113a
+        #[test]
+        fn kind_113a() {
+            let data = &[58, 17, 32, 2, 0, 0, 79, 1, 1, 0];
+            let symbol = Symbol {
+                data,
+                index: SymbolIndex(0),
+            };
+            assert_eq!(symbol.raw_kind(), 0x113a);
+            assert_eq!(
+                symbol.parse().expect("parse"),
+                SymbolData::FrameCookie(FrameCookieSymbol {
+                    offset: 544,
+                    register: Register(335),
+                    cookie_type: FrameCookieType::XorStackPointer,
+                    flags: 0,
                 })
             );
         }
