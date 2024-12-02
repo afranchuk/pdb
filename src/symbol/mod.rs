@@ -265,6 +265,8 @@ pub enum SymbolData<'t> {
     Callers(FunctionListSymbol),
     /// Callees of a function.
     Callees(FunctionListSymbol),
+    /// Inlinees of a function.
+    Inlinees(InlineesSymbol),
 }
 
 impl<'t> SymbolData<'t> {
@@ -317,7 +319,8 @@ impl<'t> SymbolData<'t> {
             | Self::FrameProcedure(_)
             | Self::CallSiteInfo(_)
             | Self::Callers(_)
-            | Self::Callees(_) => None,
+            | Self::Callees(_)
+            | Self::Inlinees(_) => None,
         }
     }
 }
@@ -398,6 +401,7 @@ impl<'t> TryFromCtx<'t> for SymbolData<'t> {
             S_CALLSITEINFO => SymbolData::CallSiteInfo(buf.parse_with(kind)?),
             S_CALLERS => SymbolData::Callers(buf.parse_with(kind)?),
             S_CALLEES => SymbolData::Callees(buf.parse_with(kind)?),
+            S_INLINEES => SymbolData::Inlinees(buf.parse_with(kind)?),
             other => return Err(Error::UnimplementedSymbolKind(other)),
         };
 
@@ -2424,6 +2428,7 @@ impl TryFromCtx<'_, SymbolKind> for CallSiteInfoSymbol {
     }
 }
 
+// https://github.com/microsoft/microsoft-pdb/blob/082c5290e5aff028ae84e43affa8be717aa7af73/include/cvinfo.h#L4382
 /// A list of functions and their invocation counts.
 ///
 /// Symbol kind `S_CALLEES` or `S_CALLERS`.
@@ -2455,6 +2460,33 @@ impl<'t> TryFromCtx<'t, SymbolKind> for FunctionListSymbol {
             functions,
             invocations,
         };
+        Ok((symbol, buf.pos()))
+    }
+}
+
+// https://github.com/microsoft/microsoft-pdb/issues/50
+// LLVM code: https://github.com/llvm/llvm-project/blob/bd92e46204331b9af296f53abb708317e72ab7a8/llvm/lib/DebugInfo/CodeView/TypeIndexDiscovery.cpp#L410
+/// List of inlinees of a function
+///
+/// Symbol kind `S_INLINEES`.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct InlineesSymbol {
+    /// function ids of the inlinees
+    pub inlinees: Vec<TypeIndex>,
+}
+
+impl<'t> TryFromCtx<'t, SymbolKind> for InlineesSymbol {
+    type Error = Error;
+    fn try_from_ctx(this: &'t [u8], _kind: SymbolKind) -> Result<(Self, usize)> {
+        let mut buf = ParseBuffer::from(this);
+        let count = buf.parse::<u32>()?;
+        let mut inlinees = Vec::new();
+        while !buf.is_empty() {
+            inlinees.push(buf.parse()?);
+        }
+        debug_assert_eq!(inlinees.len(), count as usize);
+
+        let symbol = InlineesSymbol { inlinees };
         Ok((symbol, buf.pos()))
     }
 }
@@ -3429,6 +3461,23 @@ mod tests {
                 SymbolData::Callees(FunctionListSymbol {
                     functions: vec![TypeIndex(0x48bf), TypeIndex(0x48bf), TypeIndex(0x48bf)],
                     invocations: vec![18624, 18625, 0]
+                })
+            );
+        }
+
+        // S_INLINEES - 0x1168
+        #[test]
+        fn kind_1168() {
+            let data = &[104, 17, 2, 0, 0, 0, 74, 18, 0, 0, 80, 18, 0, 0];
+            let symbol = Symbol {
+                data,
+                index: SymbolIndex(0),
+            };
+            assert_eq!(symbol.raw_kind(), 0x1168);
+            assert_eq!(
+                symbol.parse().expect("parse"),
+                SymbolData::Inlinees(InlineesSymbol {
+                    inlinees: vec![TypeIndex(0x124a), TypeIndex(0x1250)]
                 })
             );
         }
