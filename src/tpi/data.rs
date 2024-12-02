@@ -43,7 +43,8 @@ pub enum TypeData<'t> {
 }
 
 impl<'t> TypeData<'t> {
-    /// Return the name of this TypeData, if any
+    /// Return the name of this `TypeData`, if any
+    #[must_use]
     pub fn name(&self) -> Option<RawString<'t>> {
         let name = match self {
             Self::Class(ClassType { ref name, .. })
@@ -289,7 +290,7 @@ pub(crate) fn parse_type_data<'t>(buf: &mut ParseBuffer<'t>) -> Result<TypeData<
 
             loop {
                 let dim = parse_unsigned(buf)?;
-                if dim > u64::from(u32::max_value()) {
+                if dim > u64::from(u32::MAX) {
                     return Err(Error::UnimplementedFeature("u64 array sizes"));
                 }
                 dimensions.push(dim as u32);
@@ -557,34 +558,42 @@ unsigned short  mocom       :2;     // CV_MOCOM_UDT_e
 pub struct TypeProperties(u16);
 impl TypeProperties {
     /// Indicates if a type is packed via `#pragma pack` or similar.
+    #[must_use]
     pub fn packed(self) -> bool {
         self.0 & 0x0001 != 0
     }
 
     /// Indicates if a type has constructors or destructors.
+    #[must_use]
     pub fn constructors(self) -> bool {
         self.0 & 0x0002 != 0
     }
 
     /// Indicates if a type has any overloaded operators.
+    #[must_use]
     pub fn overloaded_operators(self) -> bool {
         self.0 & 0x0004 != 0
     }
 
     /// Indicates if a type is a nested type, e.g. a `union` defined inside a `class`.
+    #[must_use]
     pub fn is_nested_type(self) -> bool {
         self.0 & 0x0008 != 0
     }
 
     /// Indicates if a type contains nested types.
+    #[must_use]
     pub fn contains_nested_types(self) -> bool {
         self.0 & 0x0010 != 0
     }
 
     /// Indicates if a class has overloaded the assignment operator.
+    #[must_use]
     pub fn overloaded_assignment(self) -> bool {
         self.0 & 0x0020 != 0
     }
+
+    #[must_use]
     pub fn overloaded_casting(self) -> bool {
         self.0 & 0x0040 != 0
     }
@@ -593,25 +602,37 @@ impl TypeProperties {
     /// placeholder until a complete Type can be built. This is necessary for e.g. self-referential
     /// data structures, but other more common declaration/definition idioms can cause forward
     /// references too.
+    #[must_use]
     pub fn forward_reference(self) -> bool {
         self.0 & 0x0080 != 0
     }
 
+    #[must_use]
     pub fn scoped_definition(self) -> bool {
         self.0 & 0x0100 != 0
     }
+
+    #[must_use]
     pub fn has_unique_name(self) -> bool {
         self.0 & 0x0200 != 0
     }
+
+    #[must_use]
     pub fn sealed(self) -> bool {
         self.0 & 0x0400 != 0
     }
+
+    #[must_use]
     pub fn hfa(self) -> u8 {
         ((self.0 & 0x1800) >> 11) as u8
     }
+
+    #[must_use]
     pub fn intrinsic_type(self) -> bool {
         self.0 & 0x1000 != 0
     }
+
+    #[must_use]
     pub fn mocom(self) -> u8 {
         ((self.0 & 0x6000) >> 14) as u8
     }
@@ -644,55 +665,67 @@ typedef enum CV_methodprop_e {
 pub struct FieldAttributes(u16);
 impl FieldAttributes {
     #[inline]
+    #[must_use]
     pub fn access(self) -> u8 {
         (self.0 & 0x0003) as u8
     }
+
     #[inline]
+    #[must_use]
     fn method_properties(self) -> u8 {
         ((self.0 & 0x001c) >> 2) as u8
     }
 
     #[inline]
+    #[must_use]
     pub fn is_static(self) -> bool {
         self.method_properties() == 0x02
     }
 
     #[inline]
+    #[must_use]
     pub fn is_virtual(self) -> bool {
         self.method_properties() == 0x01
     }
 
     #[inline]
+    #[must_use]
     pub fn is_pure_virtual(self) -> bool {
         self.method_properties() == 0x05
     }
 
     #[inline]
+    #[must_use]
     pub fn is_intro_virtual(self) -> bool {
         matches!(self.method_properties(), 0x04 | 0x06)
     }
 
     #[inline]
+    #[must_use]
     pub fn is_pseudo(self) -> bool {
         self.0 & 0x0020 != 0
     }
 
     #[inline]
+    #[must_use]
     pub fn noinherit(self) -> bool {
         self.0 & 0x0040 != 0
     }
 
     #[inline]
+    #[must_use]
     pub fn noconstruct(self) -> bool {
         self.0 & 0x0080 != 0
     }
 
     #[inline]
+    #[must_use]
     pub fn is_compgenx(self) -> bool {
         self.0 & 0x0100 != 0
     }
 
     #[inline]
+    #[must_use]
     pub fn sealed(self) -> bool {
         self.0 & 0x0200 != 0
     }
@@ -722,15 +755,22 @@ typedef struct CV_funcattr_t {
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub struct FunctionAttributes(u16);
 impl FunctionAttributes {
+    #[must_use]
     pub fn calling_convention(self) -> u8 {
         (self.0 & 0xff) as u8
     }
+
+    #[must_use]
     pub fn cxx_return_udt(self) -> bool {
         (self.0 & 0x0100) > 0
     }
+
+    #[must_use]
     pub fn is_constructor(self) -> bool {
         (self.0 & 0x0200) > 0
     }
+
+    #[must_use]
     pub fn is_constructor_with_virtual_bases(self) -> bool {
         (self.0 & 0x0400) > 0
     }
@@ -804,6 +844,7 @@ pub struct PointerAttributes(u32);
 
 impl PointerAttributes {
     /// Indicates the type of pointer.
+    #[must_use]
     pub fn pointer_kind(self) -> PointerKind {
         match self.0 & 0x1f {
             0x00 => PointerKind::Near16,
@@ -824,6 +865,7 @@ impl PointerAttributes {
     }
 
     /// Returns the mode of this pointer.
+    #[must_use]
     pub fn pointer_mode(self) -> PointerMode {
         match (self.0 >> 5) & 0x7 {
             0x00 => PointerMode::Pointer,
@@ -836,6 +878,7 @@ impl PointerAttributes {
     }
 
     /// Returns `true` if this points to a member (either data or function).
+    #[must_use]
     pub fn pointer_to_member(self) -> bool {
         matches!(
             self.pointer_mode(),
@@ -844,31 +887,37 @@ impl PointerAttributes {
     }
 
     /// Returns `true` if this is a flat `0:32` pointer.
+    #[must_use]
     pub fn is_flat_32(self) -> bool {
         (self.0 & 0x100) != 0
     }
 
     /// Returns `true` if this pointer is `volatile`.
+    #[must_use]
     pub fn is_volatile(self) -> bool {
         (self.0 & 0x200) != 0
     }
 
     /// Returns `true` if this pointer is `const`.
+    #[must_use]
     pub fn is_const(self) -> bool {
         (self.0 & 0x400) != 0
     }
 
     /// Returns `true` if this pointer is unaligned.
+    #[must_use]
     pub fn is_unaligned(self) -> bool {
         (self.0 & 0x800) != 0
     }
 
     /// Returns `true` if this pointer is restricted (allow aggressive opts).
+    #[must_use]
     pub fn is_restrict(self) -> bool {
         (self.0 & 0x1000) != 0
     }
 
     /// Is this a C++ reference, as opposed to a C pointer?
+    #[must_use]
     pub fn is_reference(self) -> bool {
         matches!(
             self.pointer_mode(),
@@ -877,6 +926,7 @@ impl PointerAttributes {
     }
 
     /// The size of the pointer in bytes.
+    #[must_use]
     pub fn size(self) -> u8 {
         let size = ((self.0 >> 13) & 0x3f) as u8;
         if size != 0 {
@@ -890,7 +940,8 @@ impl PointerAttributes {
         }
     }
 
-    /// Returns `true` if this is a MoCOM pointer (`^` or `%`).
+    /// Returns `true` if this is a `MoCOM` pointer (`^` or `%`).
+    #[must_use]
     pub fn is_mocom(self) -> bool {
         (self.0 & 0x40000) != 0
     }
@@ -1173,8 +1224,8 @@ pub struct BitfieldType {
 pub struct FieldList<'t> {
     pub fields: Vec<TypeData<'t>>,
 
-    /// Sometimes fields can't all fit in a single FieldList, in which case the FieldList
-    /// refers to another FieldList in a chain.
+    /// Sometimes fields can't all fit in a single `FieldList`, in which case the `FieldList`
+    /// refers to another `FieldList` in a chain.
     pub continuation: Option<TypeIndex>,
 }
 

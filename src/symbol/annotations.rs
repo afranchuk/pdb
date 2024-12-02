@@ -1,7 +1,7 @@
 use crate::common::*;
 use crate::FallibleIterator;
 
-/// These values correspond to the BinaryAnnotationOpcode enum from the
+/// These values correspond to the `BinaryAnnotationOpcode` enum from the
 /// cvinfo.h
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum BinaryAnnotationOpcode {
@@ -31,7 +31,7 @@ enum BinaryAnnotationOpcode {
     ChangeColumnStart = 9,
     /// param : end column number delta (signed)
     ChangeColumnEndDelta = 10,
-    /// param : ((sourceDelta << 4) | CodeDelta)
+    /// param : ((sourceDelta << 4) | `CodeDelta`)
     ChangeCodeOffsetAndLineOffset = 11,
     /// param : codeLength, codeOffset
     ChangeCodeLengthAndCodeOffset = 12,
@@ -109,6 +109,7 @@ pub enum BinaryAnnotation {
 
 impl BinaryAnnotation {
     /// Does this annotation emit a line info?
+    #[must_use]
     pub fn emits_line_info(self) -> bool {
         matches!(
             self,
@@ -125,7 +126,7 @@ pub struct BinaryAnnotationsIter<'t> {
     buffer: ParseBuffer<'t>,
 }
 
-impl<'t> BinaryAnnotationsIter<'t> {
+impl BinaryAnnotationsIter<'_> {
     /// Parse a compact version of an unsigned integer.
     ///
     /// This implements `CVUncompressData`, which can decode numbers no larger than 0x1FFFFFFF. It
@@ -163,7 +164,7 @@ fn decode_signed_operand(value: u32) -> i32 {
     }
 }
 
-impl<'t> FallibleIterator for BinaryAnnotationsIter<'t> {
+impl FallibleIterator for BinaryAnnotationsIter<'_> {
     type Item = BinaryAnnotation;
     type Error = Error;
 
@@ -244,11 +245,13 @@ pub struct BinaryAnnotations<'t> {
 
 impl<'t> BinaryAnnotations<'t> {
     /// Creates a new instance of binary annotations.
+    #[must_use]
     pub(crate) fn new(data: &'t [u8]) -> Self {
         BinaryAnnotations { data }
     }
 
     /// Iterates through binary annotations.
+    #[must_use]
     pub fn iter(&self) -> BinaryAnnotationsIter<'t> {
         BinaryAnnotationsIter {
             buffer: ParseBuffer::from(self.data),

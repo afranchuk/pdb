@@ -49,7 +49,7 @@ pub struct SourceSlice {
 pub trait Source<'s>: fmt::Debug {
     /// Provides a contiguous view of the source file composed of the requested position(s).
     ///
-    /// Note that the SourceView's as_slice() method cannot fail, so `view()` is the time to raise
+    /// Note that the `SourceView`'s `as_slice()` method cannot fail, so `view()` is the time to raise
     /// IO errors.
     fn view(
         &mut self,

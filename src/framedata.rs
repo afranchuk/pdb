@@ -5,7 +5,7 @@
 // http://opensource.org/licenses/MIT>, at your option. This file may not be
 // copied, modified, or distributed except according to those terms.
 
-//! Facilities for parsing legacy FPO and FrameData streams.
+//! Facilities for parsing legacy FPO and `FrameData` streams.
 
 use std::cmp::Ordering;
 use std::fmt;
@@ -38,7 +38,7 @@ pub enum FrameType {
     /// Standard EBP stackframe.
     Standard = 3,
 
-    /// Frame pointer omitted, FrameData info available.
+    /// Frame pointer omitted, `FrameData` info available.
     FrameData = 4,
 }
 
@@ -169,7 +169,7 @@ impl fmt::Debug for NewFrameData {
 /// the layout of stack frames in the `dbgFPO` stream defined in the optional debug header. Since,
 /// it has been superseeded by the `tagFRAMEDATA` structure (see [`NewFrameData`]).
 ///
-/// Even if the newer FrameData stream is present, a PDB might still contain an additional FPO
+/// Even if the newer `FrameData` stream is present, a PDB might still contain an additional FPO
 /// stream. This is due to the fact that the linker simply copies over the stream. As a result, both
 /// stream might describe the same RVA.
 ///
@@ -524,6 +524,7 @@ impl<'s> FrameTable<'s> {
     }
 
     /// Returns an iterator over all frame data in this table, ordered by `code_rva`.
+    #[must_use]
     pub fn iter(&self) -> FrameDataIter<'_> {
         FrameDataIter {
             old_frames: self.old_frames(),
@@ -542,6 +543,7 @@ impl<'s> FrameTable<'s> {
     ///
     /// To obtain a `PdbInternalRva`, use [`PdbInternalSectionOffset::to_internal_rva`] or
     /// [`Rva::to_internal_rva`].
+    #[must_use]
     pub fn iter_at_rva(&self, rva: PdbInternalRva) -> FrameDataIter<'_> {
         let old_frames = self.old_frames();
         let old_index = binary_search_by_rva(old_frames, rva);
@@ -558,6 +560,7 @@ impl<'s> FrameTable<'s> {
     }
 
     /// Indicates whether any frame data is available.
+    #[must_use]
     pub fn is_empty(&self) -> bool {
         self.new_frames().is_empty() && self.old_frames().is_empty()
     }

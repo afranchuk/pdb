@@ -20,6 +20,6 @@ fn main() {
 
     match dump_stream_names(&filename) {
         Ok(_) => (),
-        Err(e) => eprintln!("error dumping PDB: {}", e),
+        Err(e) => eprintln!("error dumping PDB: {e}"),
     }
 }

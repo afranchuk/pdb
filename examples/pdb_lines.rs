@@ -72,7 +72,7 @@ fn main() {
     match dump_pdb(filename) {
         Ok(_) => {}
         Err(e) => {
-            writeln!(&mut std::io::stderr(), "error dumping PDB: {}", e).expect("stderr write");
+            writeln!(&mut std::io::stderr(), "error dumping PDB: {e}").expect("stderr write");
         }
     }
 }

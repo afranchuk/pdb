@@ -6,7 +6,7 @@ use getopts::Options;
 use pdb::{FallibleIterator, PdbInternalSectionOffset, RawString};
 
 fn print_usage(program: &str, opts: Options) {
-    let brief = format!("Usage: {} input.pdb", program);
+    let brief = format!("Usage: {program} input.pdb");
     print!("{}", opts.usage(&brief));
 }
 
@@ -28,12 +28,10 @@ fn print_symbol(symbol: &pdb::Symbol<'_>) -> pdb::Result<()> {
         pdb::SymbolData::Procedure(data) => {
             print_row(data.offset, "function", data.name);
         }
-        pdb::SymbolData::ManagedProcedure(data) => {
-            match data.name {
-                None => print_row(data.offset, "function", RawString::from(&b"<empty>"[..])),
-                Some(name) => print_row(data.offset, "function", name),
-            }
-        }
+        pdb::SymbolData::ManagedProcedure(data) => match data.name {
+            None => print_row(data.offset, "function", RawString::from(&b"<empty>"[..])),
+            Some(name) => print_row(data.offset, "function", name),
+        },
         pdb::SymbolData::ManagedSlot(data) => {
             print_row(data.offset, "data", data.name);
         }
@@ -51,7 +49,7 @@ fn walk_symbols(mut symbols: pdb::SymbolIter<'_>) -> pdb::Result<()> {
     while let Some(symbol) = symbols.next()? {
         match print_symbol(&symbol) {
             Ok(_) => (),
-            Err(e) => eprintln!("error printing symbol {:?}: {}", symbol, e),
+            Err(e) => eprintln!("error printing symbol {symbol:?}: {e}"),
         }
     }
 
@@ -103,6 +101,6 @@ fn main() {
 
     match dump_pdb(filename) {
         Ok(_) => (),
-        Err(e) => eprintln!("error dumping PDB: {}", e),
+        Err(e) => eprintln!("error dumping PDB: {e}"),
     }
 }

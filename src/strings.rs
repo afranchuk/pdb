@@ -123,7 +123,7 @@ impl<'s> StringTable<'s> {
     }
 }
 
-impl<'s> StringTable<'s> {
+impl StringTable<'_> {
     /// Resolves a string value from this string table.
     ///
     /// Errors if the offset is out of bounds, otherwise returns the raw binary string value.

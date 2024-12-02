@@ -202,7 +202,7 @@ pub(crate) struct RangeIter<'t> {
     end: u32,
 }
 
-impl<'t> RangeIter<'t> {
+impl RangeIter<'_> {
     /// Creates a `RangeIter` that does not yield any ranges.
     pub fn empty() -> Self {
         RangeIter {
@@ -395,13 +395,14 @@ pub struct AddressMap<'s> {
     pub(crate) original_to_transformed: Option<OMAPTable<'s>>,
 }
 
-impl<'s> AddressMap<'s> {
+impl AddressMap<'_> {
     /// Resolves actual ranges in the executable's address space.
     ///
     /// The given internal address range might be split up into multiple ranges in the executable.
     /// This iterator traverses all mapped ranges in the order of the PDB-internal mapping. All
     /// empty or eliminated ranges are skipped. Thus, the iterator might be empty even for non-empty
     /// ranges.
+    #[must_use]
     pub fn rva_ranges(&self, range: Range<PdbInternalRva>) -> RvaRangeIter<'_> {
         RvaRangeIter(match self.original_to_transformed {
             Some(ref omap) => omap.lookup_range(range.start.0..range.end.0),
@@ -415,6 +416,7 @@ impl<'s> AddressMap<'s> {
     /// space. This iterator traverses all mapped ranges in the order of the actual RVA mapping.
     /// This iterator might be empty even for non-empty ranges if no corresponding original range
     /// can be found.
+    #[must_use]
     pub fn internal_rva_ranges(&self, range: Range<Rva>) -> PdbInternalRvaRangeIter<'_> {
         PdbInternalRvaRangeIter(match self.transformed_to_original {
             Some(ref omap) => omap.lookup_range(range.start.0..range.end.0),
@@ -459,6 +461,7 @@ impl Rva {
     ///
     /// This is an offset into PE section headers of the executable. To retrieve section offsets
     /// used in the PDB, use [`to_internal_offset`](Self::to_internal_offset) instead.
+    #[must_use]
     pub fn to_section_offset(self, translator: &AddressMap<'_>) -> Option<SectionOffset> {
         let (section, offset) = match translator.transformed_sections {
             Some(ref sections) => get_section_offset(sections, self.0)?,
@@ -472,6 +475,7 @@ impl Rva {
     ///
     /// This is the offset value used in the PDB file. To index into the actual PE section headers,
     /// use [`to_section_offset`](Self::to_section_offset) instead.
+    #[must_use]
     pub fn to_internal_offset(
         self,
         translator: &AddressMap<'_>,
@@ -494,6 +498,7 @@ impl PdbInternalRva {
     ///
     /// This is an offset into PE section headers of the executable. To retrieve section offsets
     /// used in the PDB, use [`to_internal_offset`](Self::to_internal_offset) instead.
+    #[must_use]
     pub fn to_section_offset(self, translator: &AddressMap<'_>) -> Option<SectionOffset> {
         self.to_rva(translator)?.to_section_offset(translator)
     }
@@ -502,6 +507,7 @@ impl PdbInternalRva {
     ///
     /// This is the offset value used in the PDB file. To index into the actual PE section headers,
     /// use [`to_section_offset`](Self::to_section_offset) instead.
+    #[must_use]
     pub fn to_internal_offset(
         self,
         translator: &AddressMap<'_>,
@@ -513,6 +519,7 @@ impl PdbInternalRva {
 
 impl SectionOffset {
     /// Resolves an actual Relative Virtual Address in the executable's address space.
+    #[must_use]
     pub fn to_rva(self, translator: &AddressMap<'_>) -> Option<Rva> {
         let address = match translator.transformed_sections {
             Some(ref sections) => get_virtual_address(sections, self.section, self.offset)?,
@@ -526,11 +533,13 @@ impl SectionOffset {
     ///
     /// This address is not necessarily compatible with the executable's address space and should
     /// therefore not be used for debugging purposes.
+    #[must_use]
     pub fn to_internal_rva(self, translator: &AddressMap<'_>) -> Option<PdbInternalRva> {
         self.to_rva(translator)?.to_internal_rva(translator)
     }
 
     /// Resolves the PDB internal section offset.
+    #[must_use]
     pub fn to_internal_offset(
         self,
         translator: &AddressMap<'_>,
@@ -548,6 +557,7 @@ impl SectionOffset {
 
 impl PdbInternalSectionOffset {
     /// Resolves an actual Relative Virtual Address in the executable's address space.
+    #[must_use]
     pub fn to_rva(self, translator: &AddressMap<'_>) -> Option<Rva> {
         self.to_internal_rva(translator)?.to_rva(translator)
     }
@@ -562,6 +572,7 @@ impl PdbInternalSectionOffset {
     }
 
     /// Resolves the section offset in the PE headers.
+    #[must_use]
     pub fn to_section_offset(self, translator: &AddressMap<'_>) -> Option<SectionOffset> {
         if translator.transformed_sections.is_none() {
             // Fast path to avoid section table lookups

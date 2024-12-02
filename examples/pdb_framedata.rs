@@ -6,7 +6,7 @@ use getopts::Options;
 use pdb::FallibleIterator;
 
 fn print_usage(program: &str, opts: Options) {
-    let brief = format!("Usage: {} input.pdb", program);
+    let brief = format!("Usage: {program} input.pdb");
     print!("{}", opts.usage(&brief));
 }
 
@@ -69,6 +69,6 @@ fn main() {
 
     match dump_framedata(filename) {
         Ok(_) => (),
-        Err(e) => eprintln!("error dumping PDB: {}", e),
+        Err(e) => eprintln!("error dumping PDB: {e}"),
     }
 }
