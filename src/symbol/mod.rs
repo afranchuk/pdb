@@ -408,6 +408,8 @@ pub struct RegisterVariableSymbol<'t> {
     pub register: Register,
     /// Name of the variable.
     pub name: RawString<'t>,
+    /// Parameter slot
+    pub slot: Option<i32>,
 }
 
 impl<'t> TryFromCtx<'t, SymbolKind> for RegisterVariableSymbol<'t> {
@@ -416,13 +418,29 @@ impl<'t> TryFromCtx<'t, SymbolKind> for RegisterVariableSymbol<'t> {
     fn try_from_ctx(this: &'t [u8], kind: SymbolKind) -> Result<(Self, usize)> {
         let mut buf = ParseBuffer::from(this);
 
-        let symbol = RegisterVariableSymbol {
-            type_index: buf.parse()?,
-            register: buf.parse()?,
-            name: parse_symbol_name(&mut buf, kind)?,
+        let type_index: TypeIndex = buf.parse()?;
+        let register: Register = buf.parse()?;
+        let name: RawString<'t> = parse_symbol_name(&mut buf, kind)?;
+
+        let slot: Option<i32> = if (this.len() as i64 - name.len() as i64 - 8i64) >= 6 {
+            if this[name.len() + 0xb] == 0x24 {
+                Some(ParseBuffer::from(&this[(name.len() + 0xc)..]).parse()?)
+            } else {
+                None
+            }
+        } else {
+            None
         };
 
-        Ok((symbol, buf.pos()))
+        Ok((
+            Self {
+                type_index,
+                register,
+                name,
+                slot,
+            },
+            buf.pos(),
+        ))
     }
 }
 
@@ -1354,6 +1372,8 @@ pub struct LocalSymbol<'t> {
     pub flags: LocalVariableFlags,
     /// Name of the symbol.
     pub name: RawString<'t>,
+    /// Parameter slot
+    pub slot: Option<i32>,
 }
 
 impl<'t> TryFromCtx<'t, SymbolKind> for LocalSymbol<'t> {
@@ -1362,13 +1382,29 @@ impl<'t> TryFromCtx<'t, SymbolKind> for LocalSymbol<'t> {
     fn try_from_ctx(this: &'t [u8], kind: SymbolKind) -> Result<(Self, usize)> {
         let mut buf = ParseBuffer::from(this);
 
-        let symbol = LocalSymbol {
-            type_index: buf.parse()?,
-            flags: buf.parse()?,
-            name: parse_symbol_name(&mut buf, kind)?,
+        let type_index: TypeIndex = buf.parse()?;
+        let flags: LocalVariableFlags = buf.parse()?;
+        let name: RawString<'t> = parse_symbol_name(&mut buf, kind)?;
+
+        let slot: Option<i32> = if (this.len() as i64 - name.len() as i64 - 8i64) >= 6 {
+            if this[name.len() + 0xb] == 0x24 {
+                Some(ParseBuffer::from(&this[(name.len() + 0xc)..]).parse()?)
+            } else {
+                None
+            }
+        } else {
+            None
         };
 
-        Ok((symbol, buf.pos()))
+        Ok((
+            Self {
+                type_index,
+                flags,
+                name,
+                slot,
+            },
+            buf.pos(),
+        ))
     }
 }
 
@@ -1429,338 +1465,6 @@ impl<'t> TryFromCtx<'t, Endian> for AddressRange {
         };
 
         Ok((range, buf.pos()))
-    }
-}
-
-// https://github.com/Microsoft/microsoft-pdb/blob/082c5290e5aff028ae84e43affa8be717aa7af73/include/cvinfo.h#L3111
-/// A gap in a live range.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct AddressGap {
-    /// Relative offset from the beginning of the live range
-    pub gap_start_offset: u16,
-    /// Length of the gap
-    pub cb_range: u16,
-}
-
-impl<'t> TryFromCtx<'t, Endian> for AddressGap {
-    type Error = Error;
-
-    fn try_from_ctx(this: &'t [u8], _: Endian) -> Result<(Self, usize)> {
-        let mut buf = ParseBuffer::from(this);
-
-        let range = Self {
-            gap_start_offset: buf.parse()?,
-            cb_range: buf.parse()?,
-        };
-
-        Ok((range, buf.pos()))
-    }
-}
-
-// https://github.com/Microsoft/microsoft-pdb/blob/082c5290e5aff028ae84e43affa8be717aa7af73/include/cvinfo.h#L4209
-/// A live range of sub field of variable
-///
-/// Symbol kind `S_DEFRANGE`.
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct DefRangeSymbol {
-    /// DIA program to evaluate the value of the symbol
-    pub program: u32,
-    /// Range of addresses where this program is valid
-    pub range: AddressRange,
-    /// The value is not available in following gaps
-    pub gaps: Vec<AddressGap>,
-}
-
-impl TryFromCtx<'_, SymbolKind> for DefRangeSymbol {
-    type Error = Error;
-
-    fn try_from_ctx(this: &'_ [u8], _kind: SymbolKind) -> Result<(Self, usize)> {
-        let mut buf = ParseBuffer::from(this);
-
-        // https://github.com/Microsoft/microsoft-pdb/blob/082c5290e5aff028ae84e43affa8be717aa7af73/include/cvinfo.h#L4313
-        let gap_count = (
-            buf.len() + 4 /* sizeof(reclen) + buf offset */
-            - 16 /* sizeof(DEFRANGESYM) */
-        ) / 4 /* sizeof(CV_LVAR_ADDR_GAP) */;
-        let mut symbol = Self {
-            program: buf.parse()?,
-            range: buf.parse()?,
-            gaps: vec![],
-        };
-        for _ in 0..gap_count {
-            symbol.gaps.push(buf.parse()?);
-        }
-
-        Ok((symbol, buf.pos()))
-    }
-}
-
-// https://github.com/Microsoft/microsoft-pdb/blob/082c5290e5aff028ae84e43affa8be717aa7af73/include/cvinfo.h#L3102
-/// A live range of sub field of variable. like locala.i
-///
-/// Symbol kind `S_DEFRANGE_SUBFIELD`
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct DefRangeSubFieldSymbol {
-    /// DIA program to evaluate the value of the symbol
-    pub program: u32,
-    /// Offset in parent variable.
-    pub parent_offset: u32,
-    /// Range of addresses where this program is valid
-    pub range: AddressRange,
-    /// The value is not available in following gaps
-    pub gaps: Vec<AddressGap>,
-}
-
-impl TryFromCtx<'_, SymbolKind> for DefRangeSubFieldSymbol {
-    type Error = Error;
-
-    fn try_from_ctx(this: &'_ [u8], _kind: SymbolKind) -> Result<(Self, usize)> {
-        let mut buf = ParseBuffer::from(this);
-
-        // https://github.com/Microsoft/microsoft-pdb/blob/082c5290e5aff028ae84e43affa8be717aa7af73/include/cvinfo.h#L4313
-        let gap_count = (
-            buf.len() + 4 /* sizeof(reclen) + buf offset */
-            - 20 /* sizeof(DEFRANGESYMSUBFIELD) */
-        ) / 4 /* sizeof(CV_LVAR_ADDR_GAP) */;
-        let mut symbol = Self {
-            program: buf.parse()?,
-            parent_offset: buf.parse()?,
-            range: buf.parse()?,
-            gaps: vec![],
-        };
-        for _ in 0..gap_count {
-            symbol.gaps.push(buf.parse()?);
-        }
-
-        Ok((symbol, buf.pos()))
-    }
-}
-
-// https://github.com/Microsoft/microsoft-pdb/blob/082c5290e5aff028ae84e43affa8be717aa7af73/include/cvinfo.h#L4231
-/// Flags of a [`DefRangeRegisterSymbol`].
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct RangeFlags {
-    /// May have no user name on one of control flow path.
-    pub maybe: bool,
-}
-
-impl<'t> TryFromCtx<'t, Endian> for RangeFlags {
-    type Error = Error;
-
-    fn try_from_ctx(this: &'t [u8], le: Endian) -> std::result::Result<(Self, usize), Self::Error> {
-        let (value, size) = u16::try_from_ctx(this, le)?;
-
-        let flags = Self {
-            maybe: value & 0x01 != 0,
-        };
-
-        Ok((flags, size))
-    }
-}
-
-// https://github.com/Microsoft/microsoft-pdb/blob/082c5290e5aff028ae84e43affa8be717aa7af73/include/cvinfo.h#L4236
-/// A live range of en-registed variable
-///
-/// Symbol type `S_DEFRANGE_REGISTER`
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct DefRangeRegisterSymbol {
-    /// Register to hold the value of the symbol
-    pub register: u16,
-    /// Attribute of the register range.
-    pub flags: RangeFlags,
-    /// Range of addresses where this program is valid
-    pub range: AddressRange,
-    /// The value is not available in following gaps
-    pub gaps: Vec<AddressGap>,
-}
-
-impl TryFromCtx<'_, SymbolKind> for DefRangeRegisterSymbol {
-    type Error = Error;
-
-    fn try_from_ctx(this: &'_ [u8], _kind: SymbolKind) -> Result<(Self, usize)> {
-        let mut buf = ParseBuffer::from(this);
-
-        // https://github.com/Microsoft/microsoft-pdb/blob/082c5290e5aff028ae84e43affa8be717aa7af73/include/cvinfo.h#L4313
-        let gap_count = (
-            buf.len() + 4 /* sizeof(reclen) + buf offset */
-            - 16 /* sizeof(DEFRANGESYM) */
-        ) / 4 /* sizeof(CV_LVAR_ADDR_GAP) */;
-        let mut symbol = Self {
-            register: buf.parse()?,
-            flags: buf.parse()?,
-            range: buf.parse()?,
-            gaps: vec![],
-        };
-        for _ in 0..gap_count {
-            symbol.gaps.push(buf.parse()?);
-        }
-
-        Ok((symbol, buf.pos()))
-    }
-}
-
-// https://github.com/Microsoft/microsoft-pdb/blob/082c5290e5aff028ae84e43affa8be717aa7af73/include/cvinfo.h#L4245
-/// A live range of frame variable
-///
-/// Symbol type `S_DEFRANGE_FRAMEPOINTER_REL`
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct DefRangeFramePointerRelativeSymbol {
-    /// offset to frame pointer
-    pub offset: u32,
-    /// Range of addresses where this program is valid
-    pub range: AddressRange,
-    /// The value is not available in following gaps
-    pub gaps: Vec<AddressGap>,
-}
-
-impl TryFromCtx<'_, SymbolKind> for DefRangeFramePointerRelativeSymbol {
-    type Error = Error;
-
-    fn try_from_ctx(this: &'_ [u8], _kind: SymbolKind) -> Result<(Self, usize)> {
-        let mut buf = ParseBuffer::from(this);
-
-        // https://github.com/Microsoft/microsoft-pdb/blob/082c5290e5aff028ae84e43affa8be717aa7af73/include/cvinfo.h#L4313
-        let gap_count = (
-            buf.len() + 4 /* sizeof(reclen) + buf offset */
-                - 16 /* sizeof(DEFRANGESYM) */
-        ) / 4 /* sizeof(CV_LVAR_ADDR_GAP) */;
-        let mut symbol = Self {
-            offset: buf.parse()?,
-            range: buf.parse()?,
-            gaps: vec![],
-        };
-        for _ in 0..gap_count {
-            symbol.gaps.push(buf.parse()?);
-        }
-
-        Ok((symbol, buf.pos()))
-    }
-}
-
-// https://github.com/Microsoft/microsoft-pdb/blob/082c5290e5aff028ae84e43affa8be717aa7af73/include/cvinfo.h#L4255
-/// A frame variable valid in all function scope
-///
-/// Symbol type `S_DEFRANGE_FRAMEPOINTER_REL_FULL_SCOPE`
-#[derive(Copy, Clone, Debug, Eq, PartialEq)]
-pub struct DefRangeFramePointerRelativeFullScopeSymbol {
-    /// offset to frame pointer
-    pub offset: u32,
-}
-
-impl TryFromCtx<'_, SymbolKind> for DefRangeFramePointerRelativeFullScopeSymbol {
-    type Error = Error;
-
-    fn try_from_ctx(this: &'_ [u8], _kind: SymbolKind) -> Result<(Self, usize)> {
-        let mut buf = ParseBuffer::from(this);
-
-        let symbol = Self {
-            offset: buf.parse()?,
-        };
-
-        Ok((symbol, buf.pos()))
-    }
-}
-
-// https://github.com/Microsoft/microsoft-pdb/blob/082c5290e5aff028ae84e43affa8be717aa7af73/include/cvinfo.h#L4264
-/// A live range of sub field of variable. like locala.i
-///
-/// Symbol type `S_DEFRANGE_SUBFIELD_REGISTER`
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct DefRangeSubFieldRegisterSymbol {
-    /// Register to hold the value of the symbol
-    pub register: u16,
-    /// Attribute of the register range.
-    pub flags: RangeFlags,
-    /// Offset in parent variable.
-    pub offset: u32,
-    /// Range of addresses where this program is valid
-    pub range: AddressRange,
-    /// The value is not available in following gaps
-    pub gaps: Vec<AddressGap>,
-}
-
-impl TryFromCtx<'_, SymbolKind> for DefRangeSubFieldRegisterSymbol {
-    type Error = Error;
-
-    fn try_from_ctx(this: &'_ [u8], _kind: SymbolKind) -> Result<(Self, usize)> {
-        let mut buf = ParseBuffer::from(this);
-
-        // https://github.com/Microsoft/microsoft-pdb/blob/082c5290e5aff028ae84e43affa8be717aa7af73/include/cvinfo.h#L4313
-        let gap_count = (
-            buf.len() + 4 /* sizeof(reclen) + buf offset */
-                - 20 /* sizeof(DEFRANGESYMSUBFIELD) */
-        ) / 4 /* sizeof(CV_LVAR_ADDR_GAP) */;
-
-        let register: u16 = buf.parse()?;
-        let flags: RangeFlags = buf.parse()?;
-        let offset_padding: u32 = buf.parse()?;
-        let offset = offset_padding & 0xFFFu32;
-
-        let mut symbol = Self {
-            register,
-            flags,
-            offset,
-            range: buf.parse()?,
-            gaps: vec![],
-        };
-        for _ in 0..gap_count {
-            symbol.gaps.push(buf.parse()?);
-        }
-
-        Ok((symbol, buf.pos()))
-    }
-}
-
-// https://github.com/Microsoft/microsoft-pdb/blob/082c5290e5aff028ae84e43affa8be717aa7af73/include/cvinfo.h#L4279
-/// A live range of variable related to a register.
-///
-/// Symbol type `S_DEFRANGE_REGISTER_REL`
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct DefRangeRegisterRelativeSymbol {
-    /// Register to hold the base pointer of the symbol
-    pub base_register: u16,
-    /// Spilled member for s.i.
-    pub spilled_udt_member: u16,
-    /// Offset in parent variable.
-    pub offset_parent: u16,
-    /// offset to register
-    pub offset_base_pointer: u32,
-    /// Range of addresses where this program is valid
-    pub range: AddressRange,
-    /// The value is not available in following gaps
-    pub gaps: Vec<AddressGap>,
-}
-
-impl TryFromCtx<'_, SymbolKind> for DefRangeRegisterRelativeSymbol {
-    type Error = Error;
-
-    fn try_from_ctx(this: &'_ [u8], _kind: SymbolKind) -> Result<(Self, usize)> {
-        let mut buf = ParseBuffer::from(this);
-
-        // https://github.com/Microsoft/microsoft-pdb/blob/082c5290e5aff028ae84e43affa8be717aa7af73/include/cvinfo.h#L4313
-        let gap_count = (
-            buf.len() + 4 /* sizeof(reclen) + buf offset */
-                - 20 /* sizeof(DEFRANGESYMSUBFIELD) */
-        ) / 4 /* sizeof(CV_LVAR_ADDR_GAP) */;
-
-        let base_register: u16 = buf.parse()?;
-        let bitfield: u16 = buf.parse()?;
-        let spilled_udt_member = bitfield & 0x1;
-        let offset_parent = (bitfield >> 4) & 0xFFF;
-
-        let mut symbol = Self {
-            base_register,
-            spilled_udt_member,
-            offset_parent,
-            offset_base_pointer: buf.parse()?,
-            range: buf.parse()?,
-            gaps: vec![],
-        };
-        for _ in 0..gap_count {
-            symbol.gaps.push(buf.parse()?);
-        }
-
-        Ok((symbol, buf.pos()))
     }
 }
 
@@ -1910,6 +1614,8 @@ pub struct RegisterRelativeSymbol<'t> {
     pub register: Register,
     /// The variable name.
     pub name: RawString<'t>,
+    /// Parameter slot
+    pub slot: Option<i32>,
 }
 
 impl<'t> TryFromCtx<'t, SymbolKind> for RegisterRelativeSymbol<'t> {
@@ -1918,14 +1624,31 @@ impl<'t> TryFromCtx<'t, SymbolKind> for RegisterRelativeSymbol<'t> {
     fn try_from_ctx(this: &'t [u8], kind: SymbolKind) -> Result<(Self, usize)> {
         let mut buf = ParseBuffer::from(this);
 
-        let symbol = RegisterRelativeSymbol {
-            offset: buf.parse()?,
-            type_index: buf.parse()?,
-            register: buf.parse()?,
-            name: parse_symbol_name(&mut buf, kind)?,
+        let offset: i32 = buf.parse()?;
+        let type_index: TypeIndex = buf.parse()?;
+        let register: Register = buf.parse()?;
+        let name: RawString<'t> = parse_symbol_name(&mut buf, kind)?;
+
+        let slot: Option<i32> = if (this.len() as i64 - name.len() as i64 - 0xci64) >= 6 {
+            if this[name.len() + 0xf] == 0x24 {
+                Some(ParseBuffer::from(&this[(name.len() + 0x10)..]).parse()?)
+            } else {
+                None
+            }
+        } else {
+            None
         };
 
-        Ok((symbol, buf.pos()))
+        Ok((
+            Self {
+                offset,
+                type_index,
+                register,
+                name,
+                slot,
+            },
+            buf.pos(),
+        ))
     }
 }
 
@@ -2231,6 +1954,338 @@ impl<'t> TryFromCtx<'t, SymbolKind> for CoffGroupSymbol<'t> {
     }
 }
 
+// https://github.com/Microsoft/microsoft-pdb/blob/082c5290e5aff028ae84e43affa8be717aa7af73/include/cvinfo.h#L3111
+/// A gap in a live range.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct AddressGap {
+    /// Relative offset from the beginning of the live range
+    pub gap_start_offset: u16,
+    /// Length of the gap
+    pub cb_range: u16,
+}
+
+impl<'t> TryFromCtx<'t, Endian> for AddressGap {
+    type Error = Error;
+
+    fn try_from_ctx(this: &'t [u8], _: Endian) -> Result<(Self, usize)> {
+        let mut buf = ParseBuffer::from(this);
+
+        let range = Self {
+            gap_start_offset: buf.parse()?,
+            cb_range: buf.parse()?,
+        };
+
+        Ok((range, buf.pos()))
+    }
+}
+
+// https://github.com/Microsoft/microsoft-pdb/blob/082c5290e5aff028ae84e43affa8be717aa7af73/include/cvinfo.h#L4209
+/// A live range of sub field of variable
+///
+/// Symbol kind `S_DEFRANGE`.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct DefRangeSymbol {
+    /// DIA program to evaluate the value of the symbol
+    pub program: u32,
+    /// Range of addresses where this program is valid
+    pub range: AddressRange,
+    /// The value is not available in following gaps
+    pub gaps: Vec<AddressGap>,
+}
+
+impl TryFromCtx<'_, SymbolKind> for DefRangeSymbol {
+    type Error = Error;
+
+    fn try_from_ctx(this: &'_ [u8], _kind: SymbolKind) -> Result<(Self, usize)> {
+        let mut buf = ParseBuffer::from(this);
+
+        // https://github.com/Microsoft/microsoft-pdb/blob/082c5290e5aff028ae84e43affa8be717aa7af73/include/cvinfo.h#L4313
+        let gap_count = (
+            buf.len() + 4 /* sizeof(reclen) + buf offset */
+                - 16 /* sizeof(DEFRANGESYM) */
+        ) / 4 /* sizeof(CV_LVAR_ADDR_GAP) */;
+        let mut symbol = Self {
+            program: buf.parse()?,
+            range: buf.parse()?,
+            gaps: vec![],
+        };
+        for _ in 0..gap_count {
+            symbol.gaps.push(buf.parse()?);
+        }
+
+        Ok((symbol, buf.pos()))
+    }
+}
+
+// https://github.com/Microsoft/microsoft-pdb/blob/082c5290e5aff028ae84e43affa8be717aa7af73/include/cvinfo.h#L3102
+/// A live range of sub field of variable. like locala.i
+///
+/// Symbol kind `S_DEFRANGE_SUBFIELD`
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct DefRangeSubFieldSymbol {
+    /// DIA program to evaluate the value of the symbol
+    pub program: u32,
+    /// Offset in parent variable.
+    pub parent_offset: u32,
+    /// Range of addresses where this program is valid
+    pub range: AddressRange,
+    /// The value is not available in following gaps
+    pub gaps: Vec<AddressGap>,
+}
+
+impl TryFromCtx<'_, SymbolKind> for DefRangeSubFieldSymbol {
+    type Error = Error;
+
+    fn try_from_ctx(this: &'_ [u8], _kind: SymbolKind) -> Result<(Self, usize)> {
+        let mut buf = ParseBuffer::from(this);
+
+        // https://github.com/Microsoft/microsoft-pdb/blob/082c5290e5aff028ae84e43affa8be717aa7af73/include/cvinfo.h#L4313
+        let gap_count = (
+            buf.len() + 4 /* sizeof(reclen) + buf offset */
+                - 20 /* sizeof(DEFRANGESYMSUBFIELD) */
+        ) / 4 /* sizeof(CV_LVAR_ADDR_GAP) */;
+        let mut symbol = Self {
+            program: buf.parse()?,
+            parent_offset: buf.parse()?,
+            range: buf.parse()?,
+            gaps: vec![],
+        };
+        for _ in 0..gap_count {
+            symbol.gaps.push(buf.parse()?);
+        }
+
+        Ok((symbol, buf.pos()))
+    }
+}
+
+// https://github.com/Microsoft/microsoft-pdb/blob/082c5290e5aff028ae84e43affa8be717aa7af73/include/cvinfo.h#L4231
+/// Flags of a [`DefRangeRegisterSymbol`] or [`DefRangeSubFieldRegisterSymbol`].
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct RangeFlags {
+    /// May have no user name on one of control flow path.
+    pub maybe: bool,
+}
+
+impl<'t> TryFromCtx<'t, Endian> for RangeFlags {
+    type Error = Error;
+
+    fn try_from_ctx(this: &'t [u8], le: Endian) -> std::result::Result<(Self, usize), Self::Error> {
+        let (value, size) = u16::try_from_ctx(this, le)?;
+
+        let flags = Self {
+            maybe: value & 0x01 != 0,
+        };
+
+        Ok((flags, size))
+    }
+}
+
+// https://github.com/Microsoft/microsoft-pdb/blob/082c5290e5aff028ae84e43affa8be717aa7af73/include/cvinfo.h#L4236
+/// A live range of en-registed variable
+///
+/// Symbol type `S_DEFRANGE_REGISTER`
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct DefRangeRegisterSymbol {
+    /// Register to hold the value of the symbol
+    pub register: Register,
+    /// Attribute of the register range.
+    pub flags: RangeFlags,
+    /// Range of addresses where this program is valid
+    pub range: AddressRange,
+    /// The value is not available in following gaps
+    pub gaps: Vec<AddressGap>,
+}
+
+impl TryFromCtx<'_, SymbolKind> for DefRangeRegisterSymbol {
+    type Error = Error;
+
+    fn try_from_ctx(this: &'_ [u8], _kind: SymbolKind) -> Result<(Self, usize)> {
+        let mut buf = ParseBuffer::from(this);
+
+        // https://github.com/Microsoft/microsoft-pdb/blob/082c5290e5aff028ae84e43affa8be717aa7af73/include/cvinfo.h#L4313
+        let gap_count = (
+            buf.len() + 4 /* sizeof(reclen) + buf offset */
+                - 16 /* sizeof(DEFRANGESYM) */
+        ) / 4 /* sizeof(CV_LVAR_ADDR_GAP) */;
+        let mut symbol = Self {
+            register: buf.parse()?,
+            flags: buf.parse()?,
+            range: buf.parse()?,
+            gaps: vec![],
+        };
+        for _ in 0..gap_count {
+            symbol.gaps.push(buf.parse()?);
+        }
+
+        Ok((symbol, buf.pos()))
+    }
+}
+
+// https://github.com/Microsoft/microsoft-pdb/blob/082c5290e5aff028ae84e43affa8be717aa7af73/include/cvinfo.h#L4245
+/// A live range of frame variable
+///
+/// Symbol type `S_DEFRANGE_FRAMEPOINTER_REL`
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct DefRangeFramePointerRelativeSymbol {
+    /// offset to frame pointer
+    pub offset: i32,
+    /// Range of addresses where this program is valid
+    pub range: AddressRange,
+    /// The value is not available in following gaps
+    pub gaps: Vec<AddressGap>,
+}
+
+impl TryFromCtx<'_, SymbolKind> for DefRangeFramePointerRelativeSymbol {
+    type Error = Error;
+
+    fn try_from_ctx(this: &'_ [u8], _kind: SymbolKind) -> Result<(Self, usize)> {
+        let mut buf = ParseBuffer::from(this);
+
+        // https://github.com/Microsoft/microsoft-pdb/blob/082c5290e5aff028ae84e43affa8be717aa7af73/include/cvinfo.h#L4313
+        let gap_count = (
+            buf.len() + 4 /* sizeof(reclen) + buf offset */
+                - 16 /* sizeof(DEFRANGESYM) */
+        ) / 4 /* sizeof(CV_LVAR_ADDR_GAP) */;
+        let mut symbol = Self {
+            offset: buf.parse()?,
+            range: buf.parse()?,
+            gaps: vec![],
+        };
+        for _ in 0..gap_count {
+            symbol.gaps.push(buf.parse()?);
+        }
+
+        Ok((symbol, buf.pos()))
+    }
+}
+
+// https://github.com/Microsoft/microsoft-pdb/blob/082c5290e5aff028ae84e43affa8be717aa7af73/include/cvinfo.h#L4255
+/// A frame variable valid in all function scope
+///
+/// Symbol type `S_DEFRANGE_FRAMEPOINTER_REL_FULL_SCOPE`
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
+pub struct DefRangeFramePointerRelativeFullScopeSymbol {
+    /// offset to frame pointer
+    pub offset: i32,
+}
+
+impl TryFromCtx<'_, SymbolKind> for DefRangeFramePointerRelativeFullScopeSymbol {
+    type Error = Error;
+
+    fn try_from_ctx(this: &'_ [u8], _kind: SymbolKind) -> Result<(Self, usize)> {
+        let mut buf = ParseBuffer::from(this);
+
+        let symbol = Self {
+            offset: buf.parse()?,
+        };
+
+        Ok((symbol, buf.pos()))
+    }
+}
+
+// https://github.com/Microsoft/microsoft-pdb/blob/082c5290e5aff028ae84e43affa8be717aa7af73/include/cvinfo.h#L4264
+/// A live range of sub field of variable. like locala.i
+///
+/// Symbol type `S_DEFRANGE_SUBFIELD_REGISTER`
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct DefRangeSubFieldRegisterSymbol {
+    /// Register to hold the value of the symbol
+    pub register: Register,
+    /// Attribute of the register range.
+    pub flags: RangeFlags,
+    /// Offset in parent variable.
+    pub offset: u32,
+    /// Range of addresses where this program is valid
+    pub range: AddressRange,
+    /// The value is not available in following gaps
+    pub gaps: Vec<AddressGap>,
+}
+
+impl TryFromCtx<'_, SymbolKind> for DefRangeSubFieldRegisterSymbol {
+    type Error = Error;
+
+    fn try_from_ctx(this: &'_ [u8], _kind: SymbolKind) -> Result<(Self, usize)> {
+        let mut buf = ParseBuffer::from(this);
+
+        // https://github.com/Microsoft/microsoft-pdb/blob/082c5290e5aff028ae84e43affa8be717aa7af73/include/cvinfo.h#L4313
+        let gap_count = (
+            buf.len() + 4 /* sizeof(reclen) + buf offset */
+                - 20 /* sizeof(DEFRANGESYMSUBFIELD) */
+        ) / 4 /* sizeof(CV_LVAR_ADDR_GAP) */;
+
+        let register: Register = buf.parse()?;
+        let flags: RangeFlags = buf.parse()?;
+        let offset_padding: u32 = buf.parse()?;
+        let offset = offset_padding & 0xFFFu32;
+
+        let mut symbol = Self {
+            register,
+            flags,
+            offset,
+            range: buf.parse()?,
+            gaps: vec![],
+        };
+        for _ in 0..gap_count {
+            symbol.gaps.push(buf.parse()?);
+        }
+
+        Ok((symbol, buf.pos()))
+    }
+}
+
+// https://github.com/Microsoft/microsoft-pdb/blob/082c5290e5aff028ae84e43affa8be717aa7af73/include/cvinfo.h#L4279
+/// A live range of variable related to a register.
+///
+/// Symbol type `S_DEFRANGE_REGISTER_REL`
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct DefRangeRegisterRelativeSymbol {
+    /// Register to hold the base pointer of the symbol
+    pub base_register: Register,
+    /// Spilled member for s.i.
+    pub spilled_udt_member: u16,
+    /// Offset in parent variable.
+    pub offset_parent: u16,
+    /// offset to register
+    pub offset_base_pointer: i32,
+    /// Range of addresses where this program is valid
+    pub range: AddressRange,
+    /// The value is not available in following gaps
+    pub gaps: Vec<AddressGap>,
+}
+
+impl TryFromCtx<'_, SymbolKind> for DefRangeRegisterRelativeSymbol {
+    type Error = Error;
+
+    fn try_from_ctx(this: &'_ [u8], _kind: SymbolKind) -> Result<(Self, usize)> {
+        let mut buf = ParseBuffer::from(this);
+
+        // https://github.com/Microsoft/microsoft-pdb/blob/082c5290e5aff028ae84e43affa8be717aa7af73/include/cvinfo.h#L4313
+        let gap_count = (
+            buf.len() + 4 /* sizeof(reclen) + buf offset */
+                - 20 /* sizeof(DEFRANGESYMSUBFIELD) */
+        ) / 4 /* sizeof(CV_LVAR_ADDR_GAP) */;
+
+        let base_register: Register = buf.parse()?;
+        let bitfield: u16 = buf.parse()?;
+        let spilled_udt_member = bitfield & 0x1;
+        let offset_parent = (bitfield >> 4) & 0xFFF;
+
+        let mut symbol = Self {
+            base_register,
+            spilled_udt_member,
+            offset_parent,
+            offset_base_pointer: buf.parse()?,
+            range: buf.parse()?,
+            gaps: vec![],
+        };
+        for _ in 0..gap_count {
+            symbol.gaps.push(buf.parse()?);
+        }
+
+        Ok((symbol, buf.pos()))
+    }
+}
+
 // https://github.com/Microsoft/microsoft-pdb/blob/082c5290e5aff028ae84e43affa8be717aa7af73/include/cvinfo.h#L3573
 /// BP-Relative variable
 ///
@@ -2238,11 +2293,13 @@ impl<'t> TryFromCtx<'t, SymbolKind> for CoffGroupSymbol<'t> {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct BasePointerRelativeSymbol<'t> {
     /// BP-relative offset
-    pub offset: u32,
+    pub offset: i32,
     /// Type index or Metadata token
     pub type_index: TypeIndex,
     /// Length-prefixed name
     pub name: RawString<'t>,
+    /// Parameter slot
+    pub slot: Option<i32>,
 }
 
 impl<'t> TryFromCtx<'t, SymbolKind> for BasePointerRelativeSymbol<'t> {
@@ -2251,21 +2308,33 @@ impl<'t> TryFromCtx<'t, SymbolKind> for BasePointerRelativeSymbol<'t> {
     fn try_from_ctx(this: &'t [u8], kind: SymbolKind) -> Result<(Self, usize)> {
         let mut buf = ParseBuffer::from(this);
 
-        let symbol = match kind {
-            S_BPREL32 | S_BPREL32_ST => Self {
-                offset: buf.parse()?,
-                type_index: buf.parse()?,
-                name: parse_symbol_name(&mut buf, kind)?,
-            },
-            S_BPREL32_16T => Self {
-                offset: buf.parse()?,
-                type_index: TypeIndex::from(buf.parse::<u16>()? as u32),
-                name: parse_symbol_name(&mut buf, kind)?,
-            },
+        let offset: i32 = buf.parse()?;
+        let type_index = match kind {
+            S_BPREL32 | S_BPREL32_ST => buf.parse()?,
+            S_BPREL32_16T => TypeIndex::from(buf.parse::<u16>()? as u32),
             _ => return Err(Error::UnimplementedSymbolKind(kind)),
         };
+        let name: RawString<'t> = parse_symbol_name(&mut buf, kind)?;
 
-        Ok((symbol, buf.pos()))
+        let slot: Option<i32> = if (this.len() as i64 - name.len() as i64 - 0xai64) >= 6 {
+            if this[name.len() + 0xd] == 0x24 {
+                Some(ParseBuffer::from(&this[(name.len() + 0xe)..]).parse()?)
+            } else {
+                None
+            }
+        } else {
+            None
+        };
+
+        Ok((
+            Self {
+                offset,
+                type_index,
+                name,
+                slot,
+            },
+            buf.pos(),
+        ))
     }
 }
 
@@ -2659,6 +2728,7 @@ mod tests {
                     type_index: TypeIndex(8824),
                     register: Register(18),
                     name: "this".into(),
+                    slot: None,
                 })
             );
         }
@@ -2711,6 +2781,7 @@ mod tests {
                     type_index: TypeIndex(0x1030),
                     register: Register(22),
                     name: "maximum_count".into(),
+                    slot: None,
                 })
             );
         }
@@ -3211,6 +3282,7 @@ mod tests {
                         isenreg_stat: false,
                     },
                     name: "this".into(),
+                    slot: None,
                 })
             );
         }
@@ -3279,7 +3351,7 @@ mod tests {
             assert_eq!(
                 symbol.parse().expect("parse"),
                 SymbolData::DefRangeRegister(DefRangeRegisterSymbol {
-                    register: 17,
+                    register: Register(17),
                     flags: RangeFlags { maybe: false },
                     range: AddressRange {
                         offset: PdbInternalSectionOffset {
@@ -3305,7 +3377,7 @@ mod tests {
             assert_eq!(
                 symbol.parse().expect("parse"),
                 SymbolData::DefRangeRegister(DefRangeRegisterSymbol {
-                    register: 0x13,
+                    register: Register(0x13),
                     flags: RangeFlags { maybe: true },
                     range: AddressRange {
                         offset: PdbInternalSectionOffset {

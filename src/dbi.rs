@@ -611,8 +611,8 @@ impl FallibleIterator for DBISectionContributionIter<'_> {
     }
 }
 
-/// See https://github.com/google/syzygy/blob/8164b24ebde9c5649c9a09e88a7fc0b0fcbd1bc5/syzygy/pdb/pdb_data.h#L172
-/// Also see https://www.virtualbox.org/browser/vbox/trunk/include/iprt/formats/codeview.h?rev=93115#L272
+/// See <https://github.com/google/syzygy/blob/8164b24ebde9c5649c9a09e88a7fc0b0fcbd1bc5/syzygy/pdb/pdb_data.h#L172>
+/// Also see <https://www.virtualbox.org/browser/vbox/trunk/include/iprt/formats/codeview.h?rev=93115#L272>
 /// This is also known as OMF Segment Map. In the OMF SegmentMap structure, flags and section_type
 /// are a single 16-bit value.
 #[derive(Debug, Copy, Clone)]

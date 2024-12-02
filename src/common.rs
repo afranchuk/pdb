@@ -108,6 +108,9 @@ pub enum Error {
 
     /// An unknown binary annotation was encountered.
     UnknownBinaryAnnotation(u32),
+
+    /// An unknown register index was encountered.
+    UnknownRegister(u16),
 }
 
 impl std::error::Error for Error {
@@ -886,7 +889,7 @@ impl<'a> TryFromCtx<'a, Endian> for Variant {
 
         let variant = match this.gread_with(&mut offset, le)? {
             value if value < constants::LF_NUMERIC => Self::U16(value),
-            constants::LF_CHAR => Self::U8(this.gread_with(&mut offset, le)?),
+            constants::LF_CHAR => Self::I8(this.gread_with(&mut offset, le)?),
             constants::LF_SHORT => Self::I16(this.gread_with(&mut offset, le)?),
             constants::LF_LONG => Self::I32(this.gread_with(&mut offset, le)?),
             constants::LF_QUADWORD => Self::I64(this.gread_with(&mut offset, le)?),
