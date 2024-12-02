@@ -16,17 +16,17 @@ use std::fmt;
 use scroll::{ctx::TryFromCtx, Endian};
 
 pub const S_COMPILE: u16 = 0x0001; // Compile flags symbol
-pub const S_REGISTER_16t: u16 = 0x0002; // Register variable
-pub const S_CONSTANT_16t: u16 = 0x0003; // constant symbol
-pub const S_UDT_16t: u16 = 0x0004; // User defined type
+pub const S_REGISTER_16T: u16 = 0x0002; // Register variable
+pub const S_CONSTANT_16T: u16 = 0x0003; // constant symbol
+pub const S_UDT_16T: u16 = 0x0004; // User defined type
 pub const S_SSEARCH: u16 = 0x0005; // Start Search
 pub const S_END: u16 = 0x0006; // Block procedure "with" or thunk end
 pub const S_SKIP: u16 = 0x0007; // Reserve symbol space in $$Symbols table
 pub const S_CVRESERVE: u16 = 0x0008; // Reserved symbol for CV internal use
 pub const S_OBJNAME_ST: u16 = 0x0009; // path to object file name
 pub const S_ENDARG: u16 = 0x000a; // end of argument/return list
-pub const S_COBOLUDT_16t: u16 = 0x000b; // special UDT for cobol that does not symbol pack
-pub const S_MANYREG_16t: u16 = 0x000c; // multiple register variable
+pub const S_COBOLUDT_16T: u16 = 0x000b; // special UDT for cobol that does not symbol pack
+pub const S_MANYREG_16T: u16 = 0x000c; // multiple register variable
 pub const S_RETURN: u16 = 0x000d; // return description symbol
 pub const S_ENTRYTHIS: u16 = 0x000e; // description of this pointer on entry
 
@@ -44,25 +44,25 @@ pub const S_CEXMODEL16: u16 = 0x010a; // change execution model
 pub const S_VFTABLE16: u16 = 0x010b; // address of virtual function table
 pub const S_REGREL16: u16 = 0x010c; // register relative address
 
-pub const S_BPREL32_16t: u16 = 0x0200; // BP-relative
-pub const S_LDATA32_16t: u16 = 0x0201; // Module-local symbol
-pub const S_GDATA32_16t: u16 = 0x0202; // Global data symbol
-pub const S_PUB32_16t: u16 = 0x0203; // a public symbol (CV internal reserved)
-pub const S_LPROC32_16t: u16 = 0x0204; // Local procedure start
-pub const S_GPROC32_16t: u16 = 0x0205; // Global procedure start
+pub const S_BPREL32_16T: u16 = 0x0200; // BP-relative
+pub const S_LDATA32_16T: u16 = 0x0201; // Module-local symbol
+pub const S_GDATA32_16T: u16 = 0x0202; // Global data symbol
+pub const S_PUB32_16T: u16 = 0x0203; // a public symbol (CV internal reserved)
+pub const S_LPROC32_16T: u16 = 0x0204; // Local procedure start
+pub const S_GPROC32_16T: u16 = 0x0205; // Global procedure start
 pub const S_THUNK32_ST: u16 = 0x0206; // Thunk Start
 pub const S_BLOCK32_ST: u16 = 0x0207; // block start
 pub const S_WITH32_ST: u16 = 0x0208; // with start
 pub const S_LABEL32_ST: u16 = 0x0209; // code label
 pub const S_CEXMODEL32: u16 = 0x020a; // change execution model
-pub const S_VFTABLE32_16t: u16 = 0x020b; // address of virtual function table
-pub const S_REGREL32_16t: u16 = 0x020c; // register relative address
-pub const S_LTHREAD32_16t: u16 = 0x020d; // local thread storage
-pub const S_GTHREAD32_16t: u16 = 0x020e; // global thread storage
+pub const S_VFTABLE32_16T: u16 = 0x020b; // address of virtual function table
+pub const S_REGREL32_16T: u16 = 0x020c; // register relative address
+pub const S_LTHREAD32_16T: u16 = 0x020d; // local thread storage
+pub const S_GTHREAD32_16T: u16 = 0x020e; // global thread storage
 pub const S_SLINK32: u16 = 0x020f; // static link for MIPS EH implementation
 
-pub const S_LPROCMIPS_16t: u16 = 0x0300; // Local procedure start
-pub const S_GPROCMIPS_16t: u16 = 0x0301; // Global procedure start
+pub const S_LPROCMIPS_16T: u16 = 0x0300; // Local procedure start
+pub const S_GPROCMIPS_16T: u16 = 0x0301; // Global procedure start
 
 // if these ref symbols have names following then the names are in ST format
 pub const S_PROCREF_ST: u16 = 0x0400; // Reference to a procedure

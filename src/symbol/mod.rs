@@ -382,7 +382,7 @@ impl<'t> TryFromCtx<'t> for SymbolData<'t> {
                 SymbolData::DefRangeSubFieldRegister(buf.parse_with(kind)?)
             }
             S_DEFRANGE_REGISTER_REL => SymbolData::DefRangeRegisterRelative(buf.parse_with(kind)?),
-            S_BPREL32 | S_BPREL32_ST | S_BPREL32_16t => {
+            S_BPREL32 | S_BPREL32_ST | S_BPREL32_16T => {
                 SymbolData::BasePointerRelative(buf.parse_with(kind)?)
             }
             S_FRAMEPROC => SymbolData::FrameProcedure(buf.parse_with(kind)?),
@@ -2230,7 +2230,7 @@ impl<'t> TryFromCtx<'t, SymbolKind> for CoffGroupSymbol<'t> {
 // https://github.com/Microsoft/microsoft-pdb/blob/082c5290e5aff028ae84e43affa8be717aa7af73/include/cvinfo.h#L3573
 /// BP-Relative variable
 ///
-/// Symbol type `S_BPREL32`, `S_BPREL32_ST`, `S_BPREL16`, `S_BPREL32_16t`
+/// Symbol type `S_BPREL32`, `S_BPREL32_ST`, `S_BPREL16`, `S_BPREL32_16T`
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct BasePointerRelativeSymbol<'t> {
     /// BP-relative offset
@@ -2253,7 +2253,7 @@ impl<'t> TryFromCtx<'t, SymbolKind> for BasePointerRelativeSymbol<'t> {
                 type_index: buf.parse()?,
                 name: parse_symbol_name(&mut buf, kind)?,
             },
-            S_BPREL32_16t => Self {
+            S_BPREL32_16T => Self {
                 offset: buf.parse()?,
                 type_index: TypeIndex::from(buf.parse::<u16>()? as u32),
                 name: parse_symbol_name(&mut buf, kind)?,
