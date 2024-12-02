@@ -269,6 +269,8 @@ pub enum SymbolData<'t> {
     Inlinees(InlineesSymbol),
     /// Describes the layout of a jump table
     ArmSwitchTable(ArmSwitchTableSymbol),
+    /// Heap allocation site
+    HeapAllocationSite(HeapAllocationSiteSymbol),
 }
 
 impl<'t> SymbolData<'t> {
@@ -323,7 +325,8 @@ impl<'t> SymbolData<'t> {
             | Self::Callers(_)
             | Self::Callees(_)
             | Self::Inlinees(_)
-            | Self::ArmSwitchTable(_) => None,
+            | Self::ArmSwitchTable(_)
+            | Self::HeapAllocationSite(_) => None,
         }
     }
 }
@@ -406,6 +409,7 @@ impl<'t> TryFromCtx<'t> for SymbolData<'t> {
             S_CALLEES => SymbolData::Callees(buf.parse_with(kind)?),
             S_INLINEES => SymbolData::Inlinees(buf.parse_with(kind)?),
             S_ARMSWITCHTABLE => SymbolData::ArmSwitchTable(buf.parse_with(kind)?),
+            S_HEAPALLOCSITE => SymbolData::HeapAllocationSite(buf.parse_with(kind)?),
             other => return Err(Error::UnimplementedSymbolKind(other)),
         };
 
@@ -2599,6 +2603,37 @@ impl<'t> TryFromCtx<'t, Endian> for JumpTableEntrySize {
     }
 }
 
+/// Description of a heap allocation site.
+///
+/// Symbol kind `S_HEAPALLOCSITE`
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct HeapAllocationSiteSymbol {
+    /// The offset of the allocation site.
+    pub offset: PdbInternalSectionOffset,
+    /// length of the heap allocation call instruction
+    pub instr_length: u16,
+    /// The type index describing the function signature.
+    pub type_index: TypeIndex,
+}
+
+impl<'t> TryFromCtx<'t, SymbolKind> for HeapAllocationSiteSymbol {
+    type Error = Error;
+    fn try_from_ctx(this: &'t [u8], _kind: SymbolKind) -> Result<(Self, usize)> {
+        let mut buf = ParseBuffer::from(this);
+
+        let offset = buf.parse()?;
+        let instr_length = buf.parse()?;
+        let type_index = buf.parse()?;
+
+        let symbol = HeapAllocationSiteSymbol {
+            offset,
+            instr_length,
+            type_index,
+        };
+        Ok((symbol, buf.pos()))
+    }
+}
+
 /// PDB symbol tables contain names, locations, and metadata about functions, global/static data,
 /// constants, data types, and more.
 ///
@@ -3619,6 +3654,28 @@ mod tests {
                         offset: 0x10788
                     },
                     num_entries: 4,
+                })
+            );
+        }
+
+        // S_HEAPALLOCSITE - 0x115e
+        #[test]
+        fn kind_115e() {
+            let data = &[94, 17, 18, 166, 84, 0, 1, 0, 5, 0, 138, 20, 0, 0];
+            let symbol = Symbol {
+                data,
+                index: SymbolIndex(0),
+            };
+            assert_eq!(symbol.raw_kind(), 0x115e);
+            assert_eq!(
+                symbol.parse().expect("parse"),
+                SymbolData::HeapAllocationSite(HeapAllocationSiteSymbol {
+                    offset: PdbInternalSectionOffset {
+                        section: 0x1,
+                        offset: 0x54a612
+                    },
+                    type_index: TypeIndex(0x148a),
+                    instr_length: 5,
                 })
             );
         }
