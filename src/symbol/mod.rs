@@ -3114,6 +3114,28 @@ mod tests {
             );
         }
 
+        // S_CALLSITEINFO - 0x1139
+        #[test]
+        fn kind_1139() {
+            let data = &[57, 17, 134, 123, 8, 0, 1, 0, 0, 0, 17, 91, 0, 0];
+
+            let symbol = Symbol {
+                data,
+                index: SymbolIndex(0),
+            };
+            assert_eq!(symbol.raw_kind(), 0x1139);
+            assert_eq!(
+                symbol.parse().expect("parse"),
+                SymbolData::CallSiteInfo(CallSiteInfoSymbol {
+                    offset: PdbInternalSectionOffset {
+                        section: 0x1,
+                        offset: 0x87b86
+                    },
+                    type_index: TypeIndex(0x5b11)
+                })
+            );
+        }
+
         #[test]
         fn kind_113c() {
             let data = &[
