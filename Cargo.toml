@@ -1,6 +1,6 @@
 [package]
 name = "pdb2"
-version = "0.9.1"
+version = "0.9.2"
 description = "A parser for Microsoft PDB (Program Database) debugging information"
 repository = "https://github.com/afranchuk/pdb"
 authors = ["Jan Michael Auer <mail@jauer.org>", "Will Glynn <will@willglynn.com>", "Alex Franchuk <alex.franchuk@gmail.com>"]
