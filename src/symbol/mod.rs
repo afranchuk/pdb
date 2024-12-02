@@ -267,6 +267,8 @@ pub enum SymbolData<'t> {
     Callees(FunctionListSymbol),
     /// Inlinees of a function.
     Inlinees(InlineesSymbol),
+    /// Describes the layout of a jump table
+    ArmSwitchTable(ArmSwitchTableSymbol),
 }
 
 impl<'t> SymbolData<'t> {
@@ -320,7 +322,8 @@ impl<'t> SymbolData<'t> {
             | Self::CallSiteInfo(_)
             | Self::Callers(_)
             | Self::Callees(_)
-            | Self::Inlinees(_) => None,
+            | Self::Inlinees(_)
+            | Self::ArmSwitchTable(_) => None,
         }
     }
 }
@@ -402,6 +405,7 @@ impl<'t> TryFromCtx<'t> for SymbolData<'t> {
             S_CALLERS => SymbolData::Callers(buf.parse_with(kind)?),
             S_CALLEES => SymbolData::Callees(buf.parse_with(kind)?),
             S_INLINEES => SymbolData::Inlinees(buf.parse_with(kind)?),
+            S_ARMSWITCHTABLE => SymbolData::ArmSwitchTable(buf.parse_with(kind)?),
             other => return Err(Error::UnimplementedSymbolKind(other)),
         };
 
@@ -2491,6 +2495,110 @@ impl<'t> TryFromCtx<'t, SymbolKind> for InlineesSymbol {
     }
 }
 
+/// used to describe the layout of a jump table
+///
+/// Symbol kind `S_ARMSWITCHTABLE`
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ArmSwitchTableSymbol {
+    /// The base address that the values in the jump table are relative to.
+    pub offset_base: PdbInternalSectionOffset,
+    /// The type of each entry (absolute pointer, a relative integer, a relative integer that is shifted).
+    pub switch_type: JumpTableEntrySize,
+    /// The address of the branch instruction that uses the jump table.
+    pub offset_branch: PdbInternalSectionOffset,
+    /// The address of the jump table.
+    pub offset_table: PdbInternalSectionOffset,
+    /// The number of entries in the jump table.
+    pub num_entries: u32,
+}
+
+impl<'t> TryFromCtx<'t, SymbolKind> for ArmSwitchTableSymbol {
+    type Error = Error;
+    fn try_from_ctx(this: &'t [u8], _kind: SymbolKind) -> Result<(Self, usize)> {
+        let mut buf = ParseBuffer::from(this);
+
+        let offset_base = buf.parse()?;
+        let switch_type = buf.parse()?;
+        // need to parse the components of offset_branch and offset_table
+        // separately since they are stored in the wrong order
+        let off_branch = buf.parse()?;
+        let off_table = buf.parse()?;
+        let sec_branch = buf.parse()?;
+        let sec_table = buf.parse()?;
+        let num_entries = buf.parse()?;
+
+        let symbol = ArmSwitchTableSymbol {
+            offset_base,
+            switch_type,
+            offset_branch: PdbInternalSectionOffset {
+                offset: off_branch,
+                section: sec_branch,
+            },
+            offset_table: PdbInternalSectionOffset {
+                offset: off_table,
+                section: sec_table,
+            },
+            num_entries,
+        };
+        Ok((symbol, buf.pos()))
+    }
+}
+
+// https://github.com/microsoft/microsoft-pdb/blob/082c5290e5aff028ae84e43affa8be717aa7af73/include/cvinfo.h#L4366
+// enum CV_armswitchtype
+/// Enumeration of possible jump table entry sizes.
+#[derive(Clone, Debug, Eq, PartialEq)]
+#[repr(u16)]
+pub enum JumpTableEntrySize {
+    /// 0x00: Entry type is int8.
+    Int8 = 0,
+    /// 0x01: Entry type is uint8.
+    UInt8 = 1,
+    /// 0x02: Entry type is int16.
+    Int16 = 2,
+    /// 0x03: Entry type is uint16.
+    UInt16 = 3,
+    /// 0x04: Entry type is int32.
+    Int32 = 4,
+    /// 0x05: Entry type is uint32.
+    UInt32 = 5,
+    /// 0x06: Entry type is pointer.
+    Pointer = 6,
+    /// 0x07: Entry type is uint8 shifted left.
+    UInt8ShiftLeft = 7,
+    /// 0x08: Entry type is uint16 shifted left.
+    UInt16ShiftLeft = 8,
+    /// 0x09: Entry type is int8 shifted left.
+    Int8ShiftLeft = 9,
+    /// 0x0A: Entry type is int16 shifted left.
+    Int16ShiftLeft = 10,
+    /// 0xFFFF: Invalid entry type, used for error handling.
+    Invalid = 0xffff,
+}
+
+impl<'t> TryFromCtx<'t, Endian> for JumpTableEntrySize {
+    type Error = Error;
+    fn try_from_ctx(this: &'t [u8], _unused: Endian) -> Result<(Self, usize)> {
+        let mut buf = ParseBuffer::from(this);
+        let value = buf.parse::<u16>()?;
+        let size = match value {
+            0 => Self::Int8,
+            1 => Self::UInt8,
+            2 => Self::Int16,
+            3 => Self::UInt16,
+            4 => Self::Int32,
+            5 => Self::UInt32,
+            6 => Self::Pointer,
+            7 => Self::UInt8ShiftLeft,
+            8 => Self::UInt16ShiftLeft,
+            9 => Self::Int8ShiftLeft,
+            10 => Self::Int16ShiftLeft,
+            _ => Self::Invalid,
+        };
+        Ok((size, buf.pos()))
+    }
+}
+
 /// PDB symbol tables contain names, locations, and metadata about functions, global/static data,
 /// constants, data types, and more.
 ///
@@ -3478,6 +3586,39 @@ mod tests {
                 symbol.parse().expect("parse"),
                 SymbolData::Inlinees(InlineesSymbol {
                     inlinees: vec![TypeIndex(0x124a), TypeIndex(0x1250)]
+                })
+            );
+        }
+
+        // S_ARMSWITCHTABLE - 0x1159
+        #[test]
+        fn kind_1159() {
+            let data = &[
+                89, 17, 136, 7, 1, 0, 2, 0, 4, 0, 161, 229, 7, 0, 136, 7, 1, 0, 1, 0, 2, 0, 4, 0,
+                0, 0,
+            ];
+            let symbol = Symbol {
+                data,
+                index: SymbolIndex(0),
+            };
+            assert_eq!(symbol.raw_kind(), 0x1159);
+            assert_eq!(
+                symbol.parse().expect("parse"),
+                SymbolData::ArmSwitchTable(ArmSwitchTableSymbol {
+                    offset_base: PdbInternalSectionOffset {
+                        section: 2,
+                        offset: 0x10788
+                    },
+                    switch_type: JumpTableEntrySize::Int32,
+                    offset_branch: PdbInternalSectionOffset {
+                        section: 0x1,
+                        offset: 0x7e5a1
+                    },
+                    offset_table: PdbInternalSectionOffset {
+                        section: 2,
+                        offset: 0x10788
+                    },
+                    num_entries: 4,
                 })
             );
         }
