@@ -261,6 +261,18 @@ pub enum SymbolData<'t> {
     FrameProcedure(FrameProcedureSymbol),
     /// Indirect call site information.
     CallSiteInfo(CallSiteInfoSymbol),
+    /// Callers of a function.
+    Callers(FunctionListSymbol),
+    /// Callees of a function.
+    Callees(FunctionListSymbol),
+    /// Inlinees of a function.
+    Inlinees(InlineesSymbol),
+    /// Describes the layout of a jump table
+    ArmSwitchTable(ArmSwitchTableSymbol),
+    /// Heap allocation site
+    HeapAllocationSite(HeapAllocationSiteSymbol),
+    /// A security cookie on a stack frame
+    FrameCookie(FrameCookieSymbol),
 }
 
 impl<'t> SymbolData<'t> {
@@ -311,7 +323,13 @@ impl<'t> SymbolData<'t> {
             | Self::DefRangeSubFieldRegister(_)
             | Self::DefRangeRegisterRelative(_)
             | Self::FrameProcedure(_)
-            | Self::CallSiteInfo(_) => None,
+            | Self::CallSiteInfo(_)
+            | Self::Callers(_)
+            | Self::Callees(_)
+            | Self::Inlinees(_)
+            | Self::ArmSwitchTable(_)
+            | Self::HeapAllocationSite(_)
+            | Self::FrameCookie(_) => None,
         }
     }
 }
@@ -390,6 +408,12 @@ impl<'t> TryFromCtx<'t> for SymbolData<'t> {
             }
             S_FRAMEPROC => SymbolData::FrameProcedure(buf.parse_with(kind)?),
             S_CALLSITEINFO => SymbolData::CallSiteInfo(buf.parse_with(kind)?),
+            S_CALLERS => SymbolData::Callers(buf.parse_with(kind)?),
+            S_CALLEES => SymbolData::Callees(buf.parse_with(kind)?),
+            S_INLINEES => SymbolData::Inlinees(buf.parse_with(kind)?),
+            S_ARMSWITCHTABLE => SymbolData::ArmSwitchTable(buf.parse_with(kind)?),
+            S_HEAPALLOCSITE => SymbolData::HeapAllocationSite(buf.parse_with(kind)?),
+            S_FRAMECOOKIE => SymbolData::FrameCookie(buf.parse_with(kind)?),
             other => return Err(Error::UnimplementedSymbolKind(other)),
         };
 
@@ -2485,6 +2509,273 @@ impl TryFromCtx<'_, SymbolKind> for CallSiteInfoSymbol {
     }
 }
 
+// https://github.com/microsoft/microsoft-pdb/blob/082c5290e5aff028ae84e43affa8be717aa7af73/include/cvinfo.h#L4382
+/// A list of functions and their invocation counts.
+///
+/// Symbol kind `S_CALLEES` or `S_CALLERS`.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct FunctionListSymbol {
+    /// The list of function indices.
+    functions: Vec<TypeIndex>,
+    /// The list of invocation counts.
+    invocations: Vec<u32>,
+}
+
+impl<'t> TryFromCtx<'t, SymbolKind> for FunctionListSymbol {
+    type Error = Error;
+    fn try_from_ctx(this: &'t [u8], _kind: SymbolKind) -> Result<(Self, usize)> {
+        let mut buf = ParseBuffer::from(this);
+        let count: u32 = buf.parse()?;
+        let functions = vec![buf.parse()?; count as usize];
+
+        // the function list is followed by a parallel list of invocation counts.
+        // non-existent counts are implicitly zero.
+        let mut invocations = Vec::new();
+        while !buf.is_empty() {
+            invocations.push(buf.parse()?);
+        }
+        debug_assert!(invocations.len() <= functions.len());
+        invocations.resize(functions.len(), 0);
+
+        let symbol = FunctionListSymbol {
+            functions,
+            invocations,
+        };
+        Ok((symbol, buf.pos()))
+    }
+}
+
+// https://github.com/microsoft/microsoft-pdb/issues/50
+// LLVM code: https://github.com/llvm/llvm-project/blob/bd92e46204331b9af296f53abb708317e72ab7a8/llvm/lib/DebugInfo/CodeView/TypeIndexDiscovery.cpp#L410
+/// List of inlinees of a function
+///
+/// Symbol kind `S_INLINEES`.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct InlineesSymbol {
+    /// function ids of the inlinees
+    pub inlinees: Vec<TypeIndex>,
+}
+
+impl<'t> TryFromCtx<'t, SymbolKind> for InlineesSymbol {
+    type Error = Error;
+    fn try_from_ctx(this: &'t [u8], _kind: SymbolKind) -> Result<(Self, usize)> {
+        let mut buf = ParseBuffer::from(this);
+        let count = buf.parse::<u32>()?;
+        let mut inlinees = Vec::new();
+        while !buf.is_empty() {
+            inlinees.push(buf.parse()?);
+        }
+        debug_assert_eq!(inlinees.len(), count as usize);
+
+        let symbol = InlineesSymbol { inlinees };
+        Ok((symbol, buf.pos()))
+    }
+}
+
+/// used to describe the layout of a jump table
+///
+/// Symbol kind `S_ARMSWITCHTABLE`
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ArmSwitchTableSymbol {
+    /// The base address that the values in the jump table are relative to.
+    pub offset_base: PdbInternalSectionOffset,
+    /// The type of each entry (absolute pointer, a relative integer, a relative integer that is shifted).
+    pub switch_type: JumpTableEntrySize,
+    /// The address of the branch instruction that uses the jump table.
+    pub offset_branch: PdbInternalSectionOffset,
+    /// The address of the jump table.
+    pub offset_table: PdbInternalSectionOffset,
+    /// The number of entries in the jump table.
+    pub num_entries: u32,
+}
+
+impl<'t> TryFromCtx<'t, SymbolKind> for ArmSwitchTableSymbol {
+    type Error = Error;
+    fn try_from_ctx(this: &'t [u8], _kind: SymbolKind) -> Result<(Self, usize)> {
+        let mut buf = ParseBuffer::from(this);
+
+        let offset_base = buf.parse()?;
+        let switch_type = buf.parse()?;
+        // need to parse the components of offset_branch and offset_table
+        // separately since they are stored in the wrong order
+        let off_branch = buf.parse()?;
+        let off_table = buf.parse()?;
+        let sec_branch = buf.parse()?;
+        let sec_table = buf.parse()?;
+        let num_entries = buf.parse()?;
+
+        let symbol = ArmSwitchTableSymbol {
+            offset_base,
+            switch_type,
+            offset_branch: PdbInternalSectionOffset {
+                offset: off_branch,
+                section: sec_branch,
+            },
+            offset_table: PdbInternalSectionOffset {
+                offset: off_table,
+                section: sec_table,
+            },
+            num_entries,
+        };
+        Ok((symbol, buf.pos()))
+    }
+}
+
+// https://github.com/microsoft/microsoft-pdb/blob/082c5290e5aff028ae84e43affa8be717aa7af73/include/cvinfo.h#L4366
+// enum CV_armswitchtype
+/// Enumeration of possible jump table entry sizes.
+#[derive(Clone, Debug, Eq, PartialEq)]
+#[repr(u16)]
+pub enum JumpTableEntrySize {
+    /// 0x00: Entry type is int8.
+    Int8 = 0,
+    /// 0x01: Entry type is uint8.
+    UInt8 = 1,
+    /// 0x02: Entry type is int16.
+    Int16 = 2,
+    /// 0x03: Entry type is uint16.
+    UInt16 = 3,
+    /// 0x04: Entry type is int32.
+    Int32 = 4,
+    /// 0x05: Entry type is uint32.
+    UInt32 = 5,
+    /// 0x06: Entry type is pointer.
+    Pointer = 6,
+    /// 0x07: Entry type is uint8 shifted left.
+    UInt8ShiftLeft = 7,
+    /// 0x08: Entry type is uint16 shifted left.
+    UInt16ShiftLeft = 8,
+    /// 0x09: Entry type is int8 shifted left.
+    Int8ShiftLeft = 9,
+    /// 0x0A: Entry type is int16 shifted left.
+    Int16ShiftLeft = 10,
+    /// 0xFFFF: Invalid entry type, used for error handling.
+    Invalid = 0xffff,
+}
+
+impl<'t> TryFromCtx<'t, Endian> for JumpTableEntrySize {
+    type Error = Error;
+    fn try_from_ctx(this: &'t [u8], _unused: Endian) -> Result<(Self, usize)> {
+        let mut buf = ParseBuffer::from(this);
+        let value = buf.parse::<u16>()?;
+        let size = match value {
+            0 => Self::Int8,
+            1 => Self::UInt8,
+            2 => Self::Int16,
+            3 => Self::UInt16,
+            4 => Self::Int32,
+            5 => Self::UInt32,
+            6 => Self::Pointer,
+            7 => Self::UInt8ShiftLeft,
+            8 => Self::UInt16ShiftLeft,
+            9 => Self::Int8ShiftLeft,
+            10 => Self::Int16ShiftLeft,
+            _ => Self::Invalid,
+        };
+        Ok((size, buf.pos()))
+    }
+}
+
+// https://github.com/microsoft/microsoft-pdb/blob/082c5290e5aff028ae84e43affa8be717aa7af73/include/cvinfo.h#L4500
+/// Description of a heap allocation site.
+///
+/// Symbol kind `S_HEAPALLOCSITE`
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct HeapAllocationSiteSymbol {
+    /// The offset of the allocation site.
+    pub offset: PdbInternalSectionOffset,
+    /// length of the heap allocation call instruction
+    pub instr_length: u16,
+    /// The type index describing the function signature.
+    pub type_index: TypeIndex,
+}
+
+impl<'t> TryFromCtx<'t, SymbolKind> for HeapAllocationSiteSymbol {
+    type Error = Error;
+    fn try_from_ctx(this: &'t [u8], _kind: SymbolKind) -> Result<(Self, usize)> {
+        let mut buf = ParseBuffer::from(this);
+
+        let offset = buf.parse()?;
+        let instr_length = buf.parse()?;
+        let type_index = buf.parse()?;
+
+        let symbol = HeapAllocationSiteSymbol {
+            offset,
+            instr_length,
+            type_index,
+        };
+        Ok((symbol, buf.pos()))
+    }
+}
+
+// https://github.com/microsoft/microsoft-pdb/blob/082c5290e5aff028ae84e43affa8be717aa7af73/include/cvinfo.h#L4522
+/// Description of a security cookie on a stack frame.
+///
+/// Symbol kind `S_FRAMECOOKIE`
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct FrameCookieSymbol {
+    /// Frame relative offset
+    pub offset: i32,
+    /// Register index
+    pub register: Register,
+    /// Cookie type
+    pub cookie_type: FrameCookieType,
+    /// Flags
+    pub flags: u8, // unknown interpretation
+}
+
+impl TryFromCtx<'_, SymbolKind> for FrameCookieSymbol {
+    type Error = Error;
+    fn try_from_ctx(this: &[u8], _kind: SymbolKind) -> Result<(Self, usize)> {
+        let mut buf = ParseBuffer::from(this);
+
+        let offset = buf.parse()?;
+        let register = buf.parse()?;
+        let cookie_type = buf.parse()?;
+        let flags = buf.parse()?;
+
+        let symbol = FrameCookieSymbol {
+            offset,
+            register,
+            cookie_type,
+            flags,
+        };
+        Ok((symbol, buf.pos()))
+    }
+}
+
+/// Construction of the security cookie value.
+#[derive(Clone, Debug, Eq, PartialEq)]
+#[repr(u8)]
+pub enum FrameCookieType {
+    /// Copy
+    Copy = 0,
+    /// Xor with stack pointer
+    XorStackPointer = 1,
+    /// Xor with base pointer
+    XorBasePointer = 2,
+    /// Xor with r13
+    XorR13 = 3,
+    /// Invalid value - only used for error handling.
+    Invalid(u8),
+}
+
+impl<'t> TryFromCtx<'t, Endian> for FrameCookieType {
+    type Error = Error;
+    fn try_from_ctx(this: &'t [u8], _le: Endian) -> Result<(Self, usize)> {
+        let mut buf = ParseBuffer::from(this);
+        let value = buf.parse::<u8>()?;
+        let cookie_type = match value {
+            0 => Self::Copy,
+            1 => Self::XorStackPointer,
+            2 => Self::XorBasePointer,
+            3 => Self::XorR13,
+            _ => Self::Invalid(value),
+        };
+        Ok((cookie_type, buf.pos()))
+    }
+}
+
 /// PDB symbol tables contain names, locations, and metadata about functions, global/static data,
 /// constants, data types, and more.
 ///
@@ -3207,6 +3498,26 @@ mod tests {
             );
         }
 
+        // S_FRAMECOOKIE - 0x113a
+        #[test]
+        fn kind_113a() {
+            let data = &[58, 17, 32, 2, 0, 0, 79, 1, 1, 0];
+            let symbol = Symbol {
+                data,
+                index: SymbolIndex(0),
+            };
+            assert_eq!(symbol.raw_kind(), 0x113a);
+            assert_eq!(
+                symbol.parse().expect("parse"),
+                SymbolData::FrameCookie(FrameCookieSymbol {
+                    offset: 544,
+                    register: Register(335),
+                    cookie_type: FrameCookieType::XorStackPointer,
+                    flags: 0,
+                })
+            );
+        }
+
         #[test]
         fn kind_113c() {
             let data = &[
@@ -3339,6 +3650,7 @@ mod tests {
             assert_eq!(symbol.parse().expect("parse"), SymbolData::InlineSiteEnd);
         }
 
+        // S_DEFRANGE_REGISTER - 0x1141
         #[test]
         fn kind_1141() {
             let data = &[65, 17, 17, 0, 0, 0, 70, 40, 0, 0, 1, 0, 66, 0, 44, 0, 19, 0];
@@ -3387,6 +3699,148 @@ mod tests {
                         cb_range: 2,
                     },
                     gaps: vec![]
+                })
+            );
+        }
+
+        // S_FRAMEPROC - 0x1012
+        #[test]
+        fn kind_1012() {
+            let data = &[
+                18, 16, 152, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 48,
+                160, 2, 0, 0, 0,
+            ];
+            let symbol = Symbol {
+                data,
+                index: SymbolIndex(0),
+            };
+            assert_eq!(symbol.raw_kind(), 0x1012);
+            assert_eq!(
+                symbol.parse().expect("parse"),
+                SymbolData::FrameProcedure(FrameProcedureSymbol {
+                    frame_byte_count: 152,
+                    padding_byte_count: 0,
+                    offset_padding: 0,
+                    callee_save_registers_byte_count: 0,
+                    exception_handler_offset: PdbInternalSectionOffset {
+                        section: 0x0,
+                        offset: 0x0
+                    },
+                    flags: FrameProcedureFlags {
+                        has_alloca: false,
+                        has_setjmp: false,
+                        has_longjmp: false,
+                        has_inline_asm: false,
+                        has_eh: true,
+                        inline_spec: true,
+                        has_seh: false,
+                        naked: false,
+                        security_checks: false,
+                        async_eh: false,
+                        gs_no_stack_ordering: false,
+                        was_inlined: false,
+                        gs_check: false,
+                        safe_buffers: true,
+                        encoded_local_base_pointer: 2,
+                        encoded_param_base_pointer: 2,
+                        pogo_on: false,
+                        valid_counts: false,
+                        opt_speed: false,
+                        guard_cf: false,
+                        guard_cfw: false,
+                    },
+                })
+            );
+        }
+
+        // S_CALLEES - 0x115a
+        #[test]
+        fn kind_115a() {
+            let data = &[
+                90, 17, 3, 0, 0, 0, 191, 72, 0, 0, 192, 72, 0, 0, 193, 72, 0, 0,
+            ];
+            let symbol = Symbol {
+                data,
+                index: SymbolIndex(0),
+            };
+            assert_eq!(symbol.raw_kind(), 0x115a);
+            assert_eq!(
+                symbol.parse().expect("parse"),
+                SymbolData::Callees(FunctionListSymbol {
+                    functions: vec![TypeIndex(0x48bf), TypeIndex(0x48bf), TypeIndex(0x48bf)],
+                    invocations: vec![18624, 18625, 0]
+                })
+            );
+        }
+
+        // S_INLINEES - 0x1168
+        #[test]
+        fn kind_1168() {
+            let data = &[104, 17, 2, 0, 0, 0, 74, 18, 0, 0, 80, 18, 0, 0];
+            let symbol = Symbol {
+                data,
+                index: SymbolIndex(0),
+            };
+            assert_eq!(symbol.raw_kind(), 0x1168);
+            assert_eq!(
+                symbol.parse().expect("parse"),
+                SymbolData::Inlinees(InlineesSymbol {
+                    inlinees: vec![TypeIndex(0x124a), TypeIndex(0x1250)]
+                })
+            );
+        }
+
+        // S_ARMSWITCHTABLE - 0x1159
+        #[test]
+        fn kind_1159() {
+            let data = &[
+                89, 17, 136, 7, 1, 0, 2, 0, 4, 0, 161, 229, 7, 0, 136, 7, 1, 0, 1, 0, 2, 0, 4, 0,
+                0, 0,
+            ];
+            let symbol = Symbol {
+                data,
+                index: SymbolIndex(0),
+            };
+            assert_eq!(symbol.raw_kind(), 0x1159);
+            assert_eq!(
+                symbol.parse().expect("parse"),
+                SymbolData::ArmSwitchTable(ArmSwitchTableSymbol {
+                    offset_base: PdbInternalSectionOffset {
+                        section: 2,
+                        offset: 0x10788
+                    },
+                    switch_type: JumpTableEntrySize::Int32,
+                    offset_branch: PdbInternalSectionOffset {
+                        section: 0x1,
+                        offset: 0x7e5a1
+                    },
+                    offset_table: PdbInternalSectionOffset {
+                        section: 2,
+                        offset: 0x10788
+                    },
+                    num_entries: 4,
+                })
+            );
+        }
+
+        // S_HEAPALLOCSITE - 0x115e
+        #[test]
+        fn kind_115e() {
+            let data = &[94, 17, 18, 166, 84, 0, 1, 0, 5, 0, 138, 20, 0, 0];
+            let symbol = Symbol {
+                data,
+                index: SymbolIndex(0),
+            };
+            assert_eq!(symbol.raw_kind(), 0x115e);
+            assert_eq!(
+                symbol.parse().expect("parse"),
+                SymbolData::HeapAllocationSite(HeapAllocationSiteSymbol {
+                    offset: PdbInternalSectionOffset {
+                        section: 0x1,
+                        offset: 0x54a612
+                    },
+                    type_index: TypeIndex(0x148a),
+                    instr_length: 5,
                 })
             );
         }
