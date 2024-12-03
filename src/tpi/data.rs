@@ -98,9 +98,14 @@ pub(crate) fn parse_type_data<'t>(buf: &mut ParseBuffer<'t>) -> Result<TypeData<
         }
 
         // https://github.com/microsoft/microsoft-pdb/issues/50#issuecomment-737890766
-        LF_STRUCTURE19 => {
+        LF_CLASS2 | LF_STRUCTURE2 | LF_INTERFACE2 => {
             let mut class = ClassType {
-                kind: ClassKind::Struct,
+                kind: match leaf {
+                    LF_CLASS2 => ClassKind::Class,
+                    LF_STRUCTURE2 => ClassKind::Struct,
+                    LF_INTERFACE2 => ClassKind::Interface,
+                    _ => unreachable!(),
+                },
                 properties: TypeProperties(buf.parse_u32()? as u16),
                 fields: parse_optional_type_index(buf)?,
                 derived_from: parse_optional_type_index(buf)?,
@@ -313,7 +318,9 @@ pub(crate) fn parse_type_data<'t>(buf: &mut ParseBuffer<'t>) -> Result<TypeData<
             //println!("array: {:x}", buf);
             //println!("dimensions: {:?}", dimensions);
 
-            assert!(buf.is_empty());
+            // Vector35/binaryninja-api#6076: NativeAOT PDBs have extra data here
+            // of unknown purpose
+            //assert!(buf.is_empty());
 
             Ok(TypeData::Array(ArrayType {
                 element_type,
@@ -346,6 +353,24 @@ pub(crate) fn parse_type_data<'t>(buf: &mut ParseBuffer<'t>) -> Result<TypeData<
             underlying_type: buf.parse()?,
             name: parse_string(leaf, buf)?,
         })),
+
+        // https://github.com/microsoft/microsoft-pdb/issues/50#issuecomment-737890766
+        LF_UNION2 => {
+            let mut union = UnionType {
+                properties: TypeProperties(buf.parse_u32()? as u16),
+                fields: buf.parse()?,
+                count: buf.parse_u16()?,
+                size: parse_unsigned(buf)?,
+                name: parse_string(leaf, buf)?,
+                unique_name: None,
+            };
+
+            if union.properties.has_unique_name() {
+                union.unique_name = Some(parse_string(leaf, buf)?);
+            }
+
+            Ok(TypeData::Union(union))
+        }
 
         // https://github.com/Microsoft/microsoft-pdb/blob/082c5290e5aff028ae84e43affa8be717aa7af73/include/cvinfo.h#L2164-L2170
         LF_BITFIELD => Ok(TypeData::Bitfield(BitfieldType {
