@@ -2367,47 +2367,47 @@ impl<'t> TryFromCtx<'t, SymbolKind> for BasePointerRelativeSymbol<'t> {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct FrameProcedureFlags {
     /// function uses `_alloca()`
-    has_alloca: bool,
+    pub has_alloca: bool,
     /// function uses `setjmp()`
-    has_setjmp: bool,
+    pub has_setjmp: bool,
     /// function uses `longjmp()`
-    has_longjmp: bool,
+    pub has_longjmp: bool,
     /// function uses inline asm
-    has_inline_asm: bool,
+    pub has_inline_asm: bool,
     /// function has EH states
-    has_eh: bool,
+    pub has_eh: bool,
     /// function was speced as inline
-    inline_spec: bool,
+    pub inline_spec: bool,
     /// function has `SEH`
-    has_seh: bool,
+    pub has_seh: bool,
     /// function is `__declspec(naked)`
-    naked: bool,
+    pub naked: bool,
     /// function has buffer security check introduced by `/GS`.
-    security_checks: bool,
+    pub security_checks: bool,
     /// function compiled with `/EHa`
-    async_eh: bool,
+    pub async_eh: bool,
     /// function has `/GS` buffer checks, but stack ordering couldn't be done
-    gs_no_stack_ordering: bool,
+    pub gs_no_stack_ordering: bool,
     /// function was inlined within another function
-    was_inlined: bool,
+    pub was_inlined: bool,
     /// function is `__declspec(strict_gs_check)`
-    gs_check: bool,
+    pub gs_check: bool,
     /// function is `__declspec(safebuffers)`
-    safe_buffers: bool,
+    pub safe_buffers: bool,
     /// record function's local pointer explicitly.
-    encoded_local_base_pointer: u8,
+    pub encoded_local_base_pointer: u8,
     /// record function's parameter pointer explicitly.
-    encoded_param_base_pointer: u8,
+    pub encoded_param_base_pointer: u8,
     /// function was compiled with `PGO/PGU`
-    pogo_on: bool,
+    pub pogo_on: bool,
     /// Do we have valid Pogo counts?
-    valid_counts: bool,
+    pub valid_counts: bool,
     /// Did we optimize for speed?
-    opt_speed: bool,
+    pub opt_speed: bool,
     /// function contains CFG checks (and no write checks)
-    guard_cf: bool,
+    pub guard_cf: bool,
     /// function contains CFW checks and/or instrumentation
-    guard_cfw: bool,
+    pub guard_cfw: bool,
 }
 
 impl<'t> TryFromCtx<'t, Endian> for FrameProcedureFlags {
