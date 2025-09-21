@@ -273,6 +273,8 @@ pub enum SymbolData<'t> {
     HeapAllocationSite(HeapAllocationSiteSymbol),
     /// A security cookie on a stack frame
     FrameCookie(FrameCookieSymbol),
+    /// A static file symbol.
+    FileStatic(FileStaticSymbol<'t>),
 }
 
 impl<'t> SymbolData<'t> {
@@ -303,6 +305,7 @@ impl<'t> SymbolData<'t> {
             Self::Section(data) => Some(data.name),
             Self::CoffGroup(data) => Some(data.name),
             Self::BasePointerRelative(data) => Some(data.name),
+            Self::FileStatic(data) => Some(data.name),
             Self::ScopeEnd
             | Self::RegisterVariable(_)
             | Self::MultiRegisterVariable(_)
@@ -414,6 +417,7 @@ impl<'t> TryFromCtx<'t> for SymbolData<'t> {
             S_ARMSWITCHTABLE => SymbolData::ArmSwitchTable(buf.parse_with(kind)?),
             S_HEAPALLOCSITE => SymbolData::HeapAllocationSite(buf.parse_with(kind)?),
             S_FRAMECOOKIE => SymbolData::FrameCookie(buf.parse_with(kind)?),
+            S_FILESTATIC => SymbolData::FileStatic(buf.parse_with(kind)?),
             other => return Err(Error::UnimplementedSymbolKind(other)),
         };
 
@@ -2773,6 +2777,44 @@ impl<'t> TryFromCtx<'t, Endian> for FrameCookieType {
             _ => Self::Invalid(value),
         };
         Ok((cookie_type, buf.pos()))
+    }
+}
+
+// https://github.com/microsoft/microsoft-pdb/blob/082c5290e5aff028ae84e43affa8be717aa7af73/include/cvinfo.h#L4522
+/// A static file symbol.
+///
+/// Symbol kind `S_FRAMECOOKIE`
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct FileStaticSymbol<'b> {
+    /// The type index of the symbol,
+    pub type_index: TypeIndex,
+    /// The index of the module file name in the string table.
+    pub module_filename_ref: StringRef,
+    /// Local variable flags.
+    pub flags: LocalVariableFlags,
+    /// Name of this symbol, a null terminated array of UTF8 characters
+    pub name: RawString<'b>
+}
+
+impl<'t> TryFromCtx<'t, SymbolKind> for FileStaticSymbol<'t> {
+    type Error = Error;
+
+    fn try_from_ctx(this: &'t [u8], kind: SymbolKind) -> std::result::Result<(Self, usize), Self::Error> {
+        let mut buf = ParseBuffer::from(this);
+        
+        let type_index = buf.parse()?;
+        let module_filename_ref = buf.parse()?;
+        let flags = buf.parse()?;
+        let name = parse_symbol_name(&mut buf, kind)?;
+
+        let result = FileStaticSymbol {
+            type_index,
+            module_filename_ref,
+            flags,
+            name,
+        };
+
+        Ok((result, buf.pos()))
     }
 }
 
