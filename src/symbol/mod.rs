@@ -2780,10 +2780,10 @@ impl<'t> TryFromCtx<'t, Endian> for FrameCookieType {
     }
 }
 
-// https://github.com/microsoft/microsoft-pdb/blob/082c5290e5aff028ae84e43affa8be717aa7af73/include/cvinfo.h#L4522
+// https://github.com/microsoft/microsoft-pdb/blob/082c5290e5aff028ae84e43affa8be717aa7af73/include/cvinfo.h#L4199
 /// A static file symbol.
 ///
-/// Symbol kind `S_FRAMECOOKIE`
+/// Symbol kind `S_FILESTATIC`
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct FileStaticSymbol<'b> {
     /// The type index of the symbol,
