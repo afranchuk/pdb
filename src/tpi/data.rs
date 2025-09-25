@@ -684,8 +684,8 @@ typedef enum CV_methodprop_e {
     CV_MTpurevirt       = 0x05,
     CV_MTpureintro      = 0x06
 } CV_methodprop_e;
-
 */
+
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub struct FieldAttributes(u16);
 impl FieldAttributes {
@@ -703,8 +703,8 @@ impl FieldAttributes {
 
     #[inline]
     #[must_use]
-    pub fn is_static(self) -> bool {
-        self.method_properties() == 0x02
+    pub fn is_vanilla(self) -> bool {
+        self.method_properties() == 0x00
     }
 
     #[inline]
@@ -715,8 +715,32 @@ impl FieldAttributes {
 
     #[inline]
     #[must_use]
+    pub fn is_static(self) -> bool {
+        self.method_properties() == 0x02
+    }
+
+    #[inline]
+    #[must_use]
+    pub fn is_friend(self) -> bool {
+        self.method_properties() == 0x03
+    }
+
+    #[inline]
+    #[must_use]
+    pub fn is_intro(self) -> bool {
+        self.method_properties() == 0x04
+    }
+
+    #[inline]
+    #[must_use]
     pub fn is_pure_virtual(self) -> bool {
         self.method_properties() == 0x05
+    }
+
+    #[inline]
+    #[must_use]
+    pub fn is_pure_intro(self) -> bool {
+        self.method_properties() == 0x06
     }
 
     #[inline]
