@@ -1683,8 +1683,8 @@ impl<'t> TryFromCtx<'t, SymbolKind> for RegisterRelativeSymbol<'t> {
 /// Thunk adjustor
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct ThunkAdjustor<'t> {
-    delta: u16,
-    target: RawString<'t>,
+    pub delta: u16,
+    pub target: RawString<'t>,
 }
 
 /// A thunk kind
@@ -2520,9 +2520,9 @@ impl TryFromCtx<'_, SymbolKind> for CallSiteInfoSymbol {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct FunctionListSymbol {
     /// The list of function indices.
-    functions: Vec<TypeIndex>,
+    pub functions: Vec<TypeIndex>,
     /// The list of invocation counts.
-    invocations: Vec<u32>,
+    pub invocations: Vec<u32>,
 }
 
 impl<'t> TryFromCtx<'t, SymbolKind> for FunctionListSymbol {
