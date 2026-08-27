@@ -433,7 +433,10 @@ fn get_section_offset(sections: &[ImageSectionHeader], address: u32) -> Option<(
         .iter()
         .take_while(|s| s.virtual_address <= address)
         .enumerate()
-        .find(|(_, s)| address < s.virtual_address + s.size_of_raw_data)?;
+        .find(|(_, s)| {
+            let end = s.virtual_address.checked_add(s.size_of_raw_data);
+            matches!(end, Some(end) if address < end)
+        })?;
 
     Some((index as u16 + 1, address - section.virtual_address))
 }
@@ -442,7 +445,7 @@ fn get_virtual_address(sections: &[ImageSectionHeader], section: u16, offset: u3
     (section as usize)
         .checked_sub(1)
         .and_then(|i| sections.get(i))
-        .map(|section| section.virtual_address + offset)
+        .and_then(|section| section.virtual_address.checked_add(offset))
 }
 
 impl Rva {
@@ -606,5 +609,44 @@ mod tests {
 
         // https://github.com/willglynn/pdb/issues/87
         assert_eq!(get_virtual_address(&sections, 0, 0x1234), None);
+    }
+    #[test]
+    fn test_get_virtual_address_overflow() {
+        let sections = vec![ImageSectionHeader {
+            virtual_address: 0x1000_0000,
+            ..Default::default()
+        }];
+
+        // Both operands come unvalidated from the PDB; an offset large enough to overflow
+        // used to panic in debug builds and wrap into an unrelated section in release.
+        assert_eq!(get_virtual_address(&sections, 1, 0xffff_ffff), None);
+        assert_eq!(get_virtual_address(&sections, 1, 0xf000_0000), None);
+        assert_eq!(
+            get_virtual_address(&sections, 1, 0xefff_ffff),
+            Some(0xffff_ffff)
+        );
+    }
+
+    #[test]
+    fn test_get_section_offset_overflow() {
+        let mut sections = vec![ImageSectionHeader {
+            virtual_address: 0x1000_0000,
+            size_of_raw_data: 0xffff_ffff,
+            ..Default::default()
+        }];
+
+        // The overflowed end always wraps below virtual_address, and take_while has already
+        // established virtual_address <= address, so this section was skipped before too. The
+        // fix removes the debug-build panic; release behaviour is unchanged.
+        assert_eq!(get_section_offset(&sections, 0x1000_0000), None);
+        assert_eq!(get_section_offset(&sections, 0x2000_0000), None);
+
+        // A well-formed section later in the table is still found.
+        sections.push(ImageSectionHeader {
+            virtual_address: 0x3000_0000,
+            size_of_raw_data: 0x1000,
+            ..Default::default()
+        });
+        assert_eq!(get_section_offset(&sections, 0x3000_0500), Some((2, 0x500)));
     }
 }
