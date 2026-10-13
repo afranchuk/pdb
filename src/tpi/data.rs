@@ -418,7 +418,9 @@ pub(crate) fn parse_type_data<'t>(buf: &mut ParseBuffer<'t>) -> Result<TypeData<
                 len += s.len() + 1;
                 vftable.names.push(s);
             }
-            assert_eq!(len, names_length);
+            if len != names_length {
+                return Err(Error::UnexpectedEof);
+            }
 
             Ok(TypeData::VirtualFunctionTable(vftable))
         }
