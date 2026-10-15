@@ -8,6 +8,7 @@
 use std::fmt;
 
 use scroll::{ctx::TryFromCtx, Endian, Pread, LE};
+use uuid::Uuid;
 
 use crate::common::*;
 use crate::msf::*;
@@ -1890,14 +1891,16 @@ impl<'t> TryFromCtx<'t, SymbolKind> for SeparatedCodeSymbol {
 /// Symbol kind `S_OEM`.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct OemSymbol<'t> {
-    /// OEM's identifier (16B GUID).
-    pub id_oem: RawString<'t>,
+    /// OEM's identifier, a 16-byte GUID.
+    ///
+    /// .NET compilers write `c6ea3fc9-59b3-49d6-bc25-0902bbabb460` here, and put a NUL-terminated
+    /// UTF-16 name (such as `MD2` or `asyncMethodInfo`) and its payload in `rgl`.
+    pub id_oem: Uuid,
     /// Type index.
     pub type_index: TypeIndex,
-    /// User data with forced 4B-alignment.
-    ///
-    /// An array of variable size, currently only the first 4B are parsed.
-    pub rgl: u32,
+    /// User data with forced 4B-alignment: the rest of the record, including any padding at its
+    /// end. Its meaning depends on `id_oem`.
+    pub rgl: &'t [u8],
 }
 
 impl<'t> TryFromCtx<'t, SymbolKind> for OemSymbol<'t> {
@@ -1906,10 +1909,18 @@ impl<'t> TryFromCtx<'t, SymbolKind> for OemSymbol<'t> {
     fn try_from_ctx(this: &'t [u8], _kind: SymbolKind) -> Result<(Self, usize)> {
         let mut buf = ParseBuffer::from(this);
 
+        // The GUID is stored like the one in the PDB information stream: three little-endian
+        // fields followed by eight bytes.
+        let d1 = buf.parse_u32()?;
+        let d2 = buf.parse_u16()?;
+        let d3 = buf.parse_u16()?;
+        let mut d4 = [0; 8];
+        d4.copy_from_slice(buf.take(8)?);
+
         let symbol = OemSymbol {
-            id_oem: buf.parse_cstring()?,
+            id_oem: Uuid::from_fields(d1, d2, d3, &d4),
             type_index: buf.parse()?,
-            rgl: buf.parse()?,
+            rgl: buf.take(buf.len())?,
         };
 
         Ok((symbol, buf.pos()))
@@ -3004,6 +3015,81 @@ mod tests {
         }
 
         #[test]
+        fn kind_0404() {
+            // An `S_OEM` record from `src/PdbTestResources/Resources/Async.pdb` in
+            // dotnet/symreader-converter (MIT): the MSIL GUID, then the UTF-16 name `MD2` and its
+            // payload in `rgl`.
+            let data = &[
+                4, 4, 201, 63, 234, 198, 179, 89, 214, 73, 188, 37, 9, 2, 187, 171, 180, 96, 0, 0,
+                0, 0, 77, 0, 68, 0, 50, 0, 0, 0, 4, 1, 0, 0, 4, 4, 0, 0, 28, 0, 0, 0, 60, 0, 77, 0,
+                49, 0, 62, 0, 100, 0, 95, 0, 95, 0, 48, 0, 0, 0, 0, 0,
+            ];
+
+            let symbol = Symbol {
+                data,
+                index: SymbolIndex(0),
+            };
+            assert_eq!(symbol.raw_kind(), 0x0404);
+            assert_eq!(
+                symbol.parse().expect("parse"),
+                SymbolData::OEM(OemSymbol {
+                    id_oem: Uuid::from_u128(0xc6ea3fc9_59b3_49d6_bc25_0902bbabb460),
+                    type_index: TypeIndex(0),
+                    rgl: &[
+                        77, 0, 68, 0, 50, 0, 0, 0, 4, 1, 0, 0, 4, 4, 0, 0, 28, 0, 0, 0, 60, 0, 77,
+                        0, 49, 0, 62, 0, 100, 0, 95, 0, 95, 0, 48, 0, 0, 0, 0, 0,
+                    ],
+                })
+            );
+        }
+
+        #[test]
+        fn kind_0404_zero_bytes_in_guid() {
+            // A GUID with zero bytes, a non-zero type index and no user data.
+            let data = &[
+                4, 4, 0x33, 0x22, 0x11, 0x00, 0x55, 0x44, 0x77, 0x00, 0x88, 0x99, 0xaa, 0xbb, 0xcc,
+                0xdd, 0xee, 0xff, 0x01, 0x10, 0x00, 0x00,
+            ];
+
+            let symbol = Symbol {
+                data,
+                index: SymbolIndex(0),
+            };
+            assert_eq!(
+                symbol.parse().expect("parse"),
+                SymbolData::OEM(OemSymbol {
+                    id_oem: Uuid::from_u128(0x00112233_4455_0077_8899_aabbccddeeff),
+                    type_index: TypeIndex(0x1001),
+                    rgl: &[],
+                })
+            );
+        }
+
+        #[test]
+        fn kind_0404_truncated() {
+            // 15 of the GUID's 16 bytes.
+            let data = &[
+                4, 4, 201, 63, 234, 198, 179, 89, 214, 73, 188, 37, 9, 2, 187, 171, 180,
+            ];
+            let symbol = Symbol {
+                data,
+                index: SymbolIndex(0),
+            };
+            assert!(matches!(symbol.parse(), Err(Error::UnexpectedEof)));
+
+            // The whole GUID, and 3 of the type index's 4 bytes.
+            let data = &[
+                4, 4, 201, 63, 234, 198, 179, 89, 214, 73, 188, 37, 9, 2, 187, 171, 180, 96, 0, 0,
+                0,
+            ];
+            let symbol = Symbol {
+                data,
+                index: SymbolIndex(0),
+            };
+            assert!(matches!(symbol.parse(), Err(Error::UnexpectedEof)));
+        }
+
+        #[test]
         fn kind_1101() {
             let data = &[1, 17, 0, 0, 0, 0, 42, 32, 67, 73, 76, 32, 42, 0];
 
@@ -3986,6 +4072,37 @@ mod tests {
             };
 
             assert_eq!(symbol, Some(expected));
+        }
+
+        #[test]
+        fn test_iter_oem_rgl_to_record_end() {
+            let data = &[
+                0x1e, 0x00, 0x04, 0x04, // S_OEM, 30 bytes
+                0xc9, 0x3f, 0xea, 0xc6, 0xb3, 0x59, 0xd6, 0x49, // MSIL GUID
+                0xbc, 0x25, 0x09, 0x02, 0xbb, 0xab, 0xb4, 0x60, //
+                0x00, 0x00, 0x00, 0x00, // type index
+                0x41, 0x00, 0x00, 0x00, // `A` in UTF-16
+                0x2a, 0x00, 0x00, 0x00, // 0x2a and three zero bytes
+                0x02, 0x00, 0x06, 0x00, // S_END
+            ];
+
+            let symbols: Vec<_> = SymbolIter::new(ParseBuffer::from(&data[..]))
+                .collect()
+                .expect("collect");
+            assert_eq!(symbols.len(), 2);
+
+            // `rgl` keeps every byte to the end of the record, trailing zeros included, and the next
+            // record starts after it.
+            assert_eq!(
+                symbols[0].parse().expect("parse"),
+                SymbolData::OEM(OemSymbol {
+                    id_oem: Uuid::from_u128(0xc6ea3fc9_59b3_49d6_bc25_0902bbabb460),
+                    type_index: TypeIndex(0),
+                    rgl: &[0x41, 0x00, 0x00, 0x00, 0x2a, 0x00, 0x00, 0x00],
+                })
+            );
+            assert_eq!(symbols[1].index, SymbolIndex(0x20));
+            assert_eq!(symbols[1].parse().expect("parse"), SymbolData::ScopeEnd);
         }
     }
 }
