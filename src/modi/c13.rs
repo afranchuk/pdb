@@ -7,7 +7,7 @@ use scroll::{ctx::TryFromCtx, Endian, Pread};
 use crate::common::*;
 use crate::modi::{
     constants, CrossModuleExport, CrossModuleRef, FileChecksum, FileInfo, LineInfo, LineInfoKind,
-    ModuleRef,
+    LineMarkerKind, ModuleRef,
 };
 use crate::symbol::{BinaryAnnotation, BinaryAnnotationsIter, InlineSiteSymbol};
 use crate::FallibleIterator;
@@ -279,15 +279,6 @@ impl<'a> DebugLinesSubsection<'a> {
     }
 }
 
-/// Marker instructions for a line offset.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-enum LineMarkerKind {
-    /// A debugger should skip this address.
-    DoNotStepOnto,
-    /// A debugger should not step into this address.
-    DoNotStepInto,
-}
-
 /// The raw line number entry in a PDB.
 #[repr(C)]
 #[derive(Clone, Copy, Debug)]
@@ -317,64 +308,43 @@ impl<'t> TryFromCtx<'t, Endian> for LineNumberHeader {
     }
 }
 
-/// A mapping of code section offsets to source line numbers.
+/// A mapping of a code section offset to a source line number or a debugger hint.
 #[derive(Clone, Debug)]
 struct LineNumberEntry {
     /// Delta offset to the start of this line contribution (debug lines subsection).
     pub offset: u32,
-    /// Start line number of the statement or expression.
+    /// Start line number of the statement or expression, or the raw marker value.
     pub start_line: u32,
-    /// End line number of the statement or expression.
+    /// End line number of the statement or expression, or the raw marker value.
     pub end_line: u32,
     /// The type of code construct this line entry refers to.
     pub kind: LineInfoKind,
-}
-
-/// Marker for debugging purposes.
-#[derive(Clone, Debug)]
-struct LineMarkerEntry {
-    /// Delta offset to the start of this line contribution (debug lines subsection).
-    #[allow(dead_code)] // reason = "unused until TODO in LineIterator is resolved"
-    pub offset: u32,
-    /// The marker kind, hinting a debugger how to deal with code at this offset.
-    #[allow(dead_code)] // reason = "debugger instructions are not exposed"
-    pub kind: LineMarkerKind,
-}
-
-/// A parsed line entry.
-#[derive(Clone, Debug)]
-enum LineEntry {
-    /// Declares a source line number.
-    Number(LineNumberEntry),
-    /// Declares a debugging marker.
-    #[allow(dead_code)] // reason = "the inner `LineMarkerEntry` is not (yet) accessed"
-    Marker(LineMarkerEntry),
+    /// The debugger hint this entry carries instead of a line number, if any.
+    pub marker: Option<LineMarkerKind>,
 }
 
 impl LineNumberHeader {
     /// Parse this line number header into a line entry.
-    pub fn parse(self) -> LineEntry {
-        // The compiler generates special line numbers to hint the debugger. Separate these out so
-        // that they are not confused with actual line number entries.
+    pub fn parse(self) -> LineNumberEntry {
         let start_line = self.flags & 0x00ff_ffff;
+
+        // The compiler generates special line numbers to hint the debugger. Name the hint, and keep
+        // the raw value in both line fields, so that these entries are not confused with actual
+        // line numbers.
         let marker = match start_line {
             0xfeefee => Some(LineMarkerKind::DoNotStepOnto),
             0xf00f00 => Some(LineMarkerKind::DoNotStepInto),
             _ => None,
         };
 
-        if let Some(kind) = marker {
-            return LineEntry::Marker(LineMarkerEntry {
-                offset: self.offset,
-                kind,
-            });
-        }
-
         // `deltaLineEnd` (bits 24 to 30) is the number of lines from the start line to the line
         // where the statement ends, as `cvinfo.h` defines it. Zero means the statement ends on its
-        // start line. The start line is at most 24 bits wide, so the sum cannot overflow.
-        let line_delta = (self.flags >> 24) & 0x7f;
-        let end_line = start_line + line_delta;
+        // start line. The start line is at most 24 bits wide, so the sum cannot overflow. A marker
+        // has no end line, so its delta is ignored.
+        let end_line = match marker {
+            Some(_) => start_line,
+            None => start_line + ((self.flags >> 24) & 0x7f),
+        };
 
         let kind = if self.flags & 0x8000_0000 != 0 {
             LineInfoKind::Statement
@@ -382,12 +352,13 @@ impl LineNumberHeader {
             LineInfoKind::Expression
         };
 
-        LineEntry::Number(LineNumberEntry {
+        LineNumberEntry {
             offset: self.offset,
             start_line,
             end_line,
             kind,
-        })
+            marker,
+        }
     }
 }
 
@@ -398,7 +369,7 @@ struct DebugLinesIterator<'a> {
 }
 
 impl FallibleIterator for DebugLinesIterator<'_> {
-    type Item = LineEntry;
+    type Item = LineNumberEntry;
     type Error = Error;
 
     fn next(&mut self) -> Result<Option<Self::Item>> {
@@ -995,21 +966,15 @@ impl FallibleIterator for LineIterator<'_> {
 
     fn next(&mut self) -> Result<Option<Self::Item>> {
         loop {
-            if let Some(entry) = self.lines.next()? {
+            if let Some(line_entry) = self.lines.next()? {
                 // A column entry is only returned if the debug lines subsection contains column
                 // information. Otherwise, the columns iterator is empty. We can safely assume that
                 // the number of line entries and column entries returned from the two iterators is
                 // equivalent. If it were not, the creation of the block would already have failed.
                 let column_entry = self.columns.next()?;
 
-                // The high-level line iterator is only interested in actual line entries. It might
-                // make sense to eventually fold markers at the same offset into the `LineInfo`
-                // record.
-                let line_entry = match entry {
-                    LineEntry::Number(line_entry) => line_entry,
-                    LineEntry::Marker(_) => continue,
-                };
-
+                // Marker entries become line records too: a debugger needs them, and the record
+                // before a marker ends where the marker starts.
                 let section_header = self.blocks.header;
                 let block_header = self.lines.block;
 
@@ -1024,6 +989,7 @@ impl FallibleIterator for LineIterator<'_> {
                     column_start: column_entry.map(|e| e.start_column.into()),
                     column_end: column_entry.map(|e| e.end_column.into()),
                     kind: line_entry.kind,
+                    marker: line_entry.marker,
                 };
 
                 let mut last_info = match std::mem::replace(&mut self.last_info, Some(line_info)) {
@@ -1042,11 +1008,14 @@ impl FallibleIterator for LineIterator<'_> {
             }
 
             // The current debug lines subsection ends. Fix up the length of the last line record
-            // using the code size of the lines section, before continuing iteration. This ensures
-            // the most accurate length of the line record, even if there are gaps between sections.
-            if let Some(ref mut last_line) = self.last_info {
+            // using the code size of the lines section, and return it before moving on. This gives
+            // the most accurate length even if there are gaps between sections, and it keeps a
+            // record from being bounded by the first record of the next subsection, whose offset
+            // may lie in a different section and compare with nothing here.
+            if let Some(mut last_line) = self.last_info.take() {
                 let section_header = self.blocks.header;
                 last_line.set_end(section_header.offset + section_header.code_size);
+                return Ok(Some(last_line));
             }
 
             if let Some(lines_section) = self.sections.next() {
@@ -1054,7 +1023,7 @@ impl FallibleIterator for LineIterator<'_> {
                 continue;
             }
 
-            return Ok(self.last_info.take());
+            return Ok(None);
         }
     }
 }
@@ -1209,6 +1178,7 @@ impl FallibleIterator for InlineeLineIterator<'_> {
                 line_end: self.line + self.line_length,
                 column_start: self.col_start,
                 column_end: self.col_end,
+                marker: None,
             };
 
             // Code length resets with every line record.
@@ -1423,10 +1393,7 @@ mod tests {
     }
 
     fn parse_line_number(flags: u32) -> LineNumberEntry {
-        match (LineNumberHeader { offset: 0, flags }).parse() {
-            LineEntry::Number(entry) => entry,
-            LineEntry::Marker(_) => panic!("{:#010x} parsed as a marker", flags),
-        }
+        (LineNumberHeader { offset: 0, flags }).parse()
     }
 
     #[test]
@@ -1436,8 +1403,8 @@ mod tests {
         // field as the low bits of the end line instead would give 130.
         let entry = parse_line_number(0x8200_007b);
         assert_eq!(
-            (entry.start_line, entry.end_line, entry.kind),
-            (123, 125, LineInfoKind::Statement)
+            (entry.start_line, entry.end_line, entry.kind, entry.marker),
+            (123, 125, LineInfoKind::Statement, None)
         );
 
         // A zero delta ends the statement on its start line.
@@ -1460,33 +1427,22 @@ mod tests {
     }
 
     #[test]
-    fn test_line_number_header_marker_ignores_delta() {
-        // Both markers with `deltaLineEnd` = 2 are still markers.
-        let entry = (LineNumberHeader {
-            offset: 0,
-            flags: 0x82fe_efee,
-        })
-        .parse();
-        assert!(matches!(
-            entry,
-            LineEntry::Marker(LineMarkerEntry {
-                kind: LineMarkerKind::DoNotStepOnto,
-                ..
-            })
-        ));
+    fn test_line_number_header_markers() {
+        // Both markers with `deltaLineEnd` = 2: the raw value fills both line fields, the delta
+        // is ignored, and `fStatement` is read as for any other record.
+        let entry = parse_line_number(0x82fe_efee);
+        assert_eq!(entry.marker, Some(LineMarkerKind::DoNotStepOnto));
+        assert_eq!(
+            (entry.start_line, entry.end_line, entry.kind),
+            (0xfeefee, 0xfeefee, LineInfoKind::Statement)
+        );
 
-        let entry = (LineNumberHeader {
-            offset: 0,
-            flags: 0x82f0_0f00,
-        })
-        .parse();
-        assert!(matches!(
-            entry,
-            LineEntry::Marker(LineMarkerEntry {
-                kind: LineMarkerKind::DoNotStepInto,
-                ..
-            })
-        ));
+        let entry = parse_line_number(0x02f0_0f00);
+        assert_eq!(entry.marker, Some(LineMarkerKind::DoNotStepInto));
+        assert_eq!(
+            (entry.start_line, entry.end_line, entry.kind),
+            (0xf00f00, 0xf00f00, LineInfoKind::Expression)
+        );
     }
 
     #[test]
@@ -1504,6 +1460,205 @@ mod tests {
         let spans: Vec<_> = lines.iter().map(|l| (l.line_start, l.line_end)).collect();
 
         assert_eq!(spans, [(22, 22), (23, 25), (24, 24)]);
+    }
+
+    #[test]
+    fn test_iter_lines_markers() {
+        // One lines subsection with columns, covering 12 bytes of code at 0001:a084, with four
+        // records: line 22 at offset 0, a `0xfeefee` marker at offset 4, line 23 at offset 8 and
+        // a `0xf00f00` marker (an expression) at offset 10.
+        let data = &[
+            242, 0, 0, 0, 72, 0, 0, 0, 132, 160, 0, 0, 1, 0, 1, 0, 12, 0, 0, 0, 0, 0, 0, 0, 4, 0,
+            0, 0, 60, 0, 0, 0, 0, 0, 0, 0, 22, 0, 0, 128, 4, 0, 0, 0, 238, 239, 254, 128, 8, 0, 0,
+            0, 23, 0, 0, 128, 10, 0, 0, 0, 0, 15, 240, 0, 1, 0, 5, 0, 7, 0, 8, 0, 3, 0, 9, 0, 2, 0,
+            3, 0,
+        ];
+
+        let line_program = LineProgram::parse(data).expect("parse line program");
+        let lines: Vec<_> = line_program.lines().collect().expect("collect lines");
+        let symbol_lines: Vec<_> = line_program
+            .lines_for_symbol(PdbInternalSectionOffset {
+                section: 0x1,
+                offset: 0xa084,
+            })
+            .collect()
+            .expect("collect lines for symbol");
+
+        let line =
+            |offset: u32, length: u32, line: u32, columns: (u32, u32), kind, marker| LineInfo {
+                offset: PdbInternalSectionOffset {
+                    section: 0x1,
+                    offset: 0xa084 + offset,
+                },
+                length: Some(length),
+                file_index: FileIndex(0x0),
+                line_start: line,
+                line_end: line,
+                column_start: Some(columns.0),
+                column_end: Some(columns.1),
+                kind,
+                marker,
+            };
+
+        // Each marker is a record of its own, with its own columns, and the record before it ends
+        // where it starts. On `master`, the markers were skipped and lines 22 and 23 covered 8 and
+        // 4 bytes.
+        let expected = [
+            line(0, 4, 22, (1, 5), LineInfoKind::Statement, None),
+            line(
+                4,
+                4,
+                0xfeefee,
+                (7, 8),
+                LineInfoKind::Statement,
+                Some(LineMarkerKind::DoNotStepOnto),
+            ),
+            line(8, 2, 23, (3, 9), LineInfoKind::Statement, None),
+            line(
+                10,
+                2,
+                0xf00f00,
+                (2, 3),
+                LineInfoKind::Expression,
+                Some(LineMarkerKind::DoNotStepInto),
+            ),
+        ];
+
+        assert_eq!(lines, expected);
+        assert_eq!(symbol_lines, expected);
+    }
+
+    #[test]
+    fn test_iter_lines_markers_without_columns() {
+        // The same 12 bytes of code, without columns, with a marker first, two markers in a row,
+        // and a marker last: `0xfeefee` at offset 0, `0xf00f00` at offset 2, line 22 at offset 4
+        // and `0xfeefee` at offset 10.
+        let data = &[
+            242, 0, 0, 0, 56, 0, 0, 0, 132, 160, 0, 0, 1, 0, 0, 0, 12, 0, 0, 0, 0, 0, 0, 0, 4, 0,
+            0, 0, 44, 0, 0, 0, 0, 0, 0, 0, 238, 239, 254, 128, 2, 0, 0, 0, 0, 15, 240, 128, 4, 0,
+            0, 0, 22, 0, 0, 128, 10, 0, 0, 0, 238, 239, 254, 128,
+        ];
+
+        let line_program = LineProgram::parse(data).expect("parse line program");
+        let lines: Vec<_> = line_program.lines().collect().expect("collect lines");
+
+        let line = |offset: u32, length: u32, line: u32, marker| LineInfo {
+            offset: PdbInternalSectionOffset {
+                section: 0x1,
+                offset: 0xa084 + offset,
+            },
+            length: Some(length),
+            file_index: FileIndex(0x0),
+            line_start: line,
+            line_end: line,
+            column_start: None,
+            column_end: None,
+            kind: LineInfoKind::Statement,
+            marker,
+        };
+
+        // A leading marker is the first record, consecutive markers bound each other, and the
+        // last marker runs to the end of the code.
+        let expected = [
+            line(0, 2, 0xfeefee, Some(LineMarkerKind::DoNotStepOnto)),
+            line(2, 2, 0xf00f00, Some(LineMarkerKind::DoNotStepInto)),
+            line(4, 6, 22, None),
+            line(10, 2, 0xfeefee, Some(LineMarkerKind::DoNotStepOnto)),
+        ];
+
+        assert_eq!(lines, expected);
+    }
+
+    #[test]
+    fn test_iter_lines_marker_ends_at_subsection_boundary() {
+        // Two lines subsections in different sections, 4 bytes of code each: a lone `0xfeefee`
+        // marker at 0001:1000, then line 22 at 0002:2000. The marker's record must end with its
+        // subsection; bounding it by the next subsection's first record would compare offsets
+        // across sections, which `set_end` rejects in debug builds.
+        let data = &[
+            242, 0, 0, 0, 32, 0, 0, 0, 0, 16, 0, 0, 1, 0, 0, 0, 4, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0,
+            20, 0, 0, 0, 0, 0, 0, 0, 238, 239, 254, 128, 242, 0, 0, 0, 32, 0, 0, 0, 0, 32, 0, 0, 2,
+            0, 0, 0, 4, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 20, 0, 0, 0, 0, 0, 0, 0, 22, 0, 0, 128,
+        ];
+
+        let line_program = LineProgram::parse(data).expect("parse line program");
+        let lines: Vec<_> = line_program.lines().collect().expect("collect lines");
+
+        let line = |section: u16, offset: u32, line: u32, marker| LineInfo {
+            offset: PdbInternalSectionOffset { section, offset },
+            length: Some(4),
+            file_index: FileIndex(0x0),
+            line_start: line,
+            line_end: line,
+            column_start: None,
+            column_end: None,
+            kind: LineInfoKind::Statement,
+            marker,
+        };
+
+        let expected = [
+            line(0x1, 0x1000, 0xfeefee, Some(LineMarkerKind::DoNotStepOnto)),
+            line(0x2, 0x2000, 22, None),
+        ];
+
+        assert_eq!(lines, expected);
+    }
+
+    #[test]
+    fn test_iter_lines_marker_spans_block_boundary() {
+        // One subsection with columns and two file blocks over 12 bytes of code: block 1 (file 0)
+        // holds line 22 at offset 0 and a `0xfeefee` marker at offset 4; block 2 (file 24) holds
+        // line 23 at offset 8. The marker ends where the next block's first record starts, not at
+        // the block boundary.
+        let data = &[
+            242, 0, 0, 0, 72, 0, 0, 0, 132, 160, 0, 0, 1, 0, 1, 0, 12, 0, 0, 0, 0, 0, 0, 0, 2, 0,
+            0, 0, 36, 0, 0, 0, 0, 0, 0, 0, 22, 0, 0, 128, 4, 0, 0, 0, 238, 239, 254, 128, 1, 0, 5,
+            0, 7, 0, 8, 0, 24, 0, 0, 0, 1, 0, 0, 0, 24, 0, 0, 0, 8, 0, 0, 0, 23, 0, 0, 128, 3, 0,
+            9, 0,
+        ];
+
+        let line_program = LineProgram::parse(data).expect("parse line program");
+        let lines: Vec<_> = line_program.lines().collect().expect("collect lines");
+        let symbol_lines: Vec<_> = line_program
+            .lines_for_symbol(PdbInternalSectionOffset {
+                section: 0x1,
+                offset: 0xa084,
+            })
+            .collect()
+            .expect("collect lines for symbol");
+
+        let line = |offset: u32, length: u32, file: u32, line: u32, columns: (u32, u32), marker| {
+            LineInfo {
+                offset: PdbInternalSectionOffset {
+                    section: 0x1,
+                    offset: 0xa084 + offset,
+                },
+                length: Some(length),
+                file_index: FileIndex(file),
+                line_start: line,
+                line_end: line,
+                column_start: Some(columns.0),
+                column_end: Some(columns.1),
+                kind: LineInfoKind::Statement,
+                marker,
+            }
+        };
+
+        let expected = [
+            line(0, 4, 0, 22, (1, 5), None),
+            line(
+                4,
+                4,
+                0,
+                0xfeefee,
+                (7, 8),
+                Some(LineMarkerKind::DoNotStepOnto),
+            ),
+            line(8, 4, 24, 23, (3, 9), None),
+        ];
+
+        assert_eq!(lines, expected);
+        assert_eq!(symbol_lines, expected);
     }
 
     #[test]
@@ -1538,6 +1693,7 @@ mod tests {
 
         let expected = [
             LineInfo {
+                marker: None,
                 offset: PdbInternalSectionOffset {
                     section: 0x1,
                     offset: 0xa084,
@@ -1551,6 +1707,7 @@ mod tests {
                 kind: LineInfoKind::Statement,
             },
             LineInfo {
+                marker: None,
                 offset: PdbInternalSectionOffset {
                     section: 0x1,
                     offset: 0xa084,
@@ -1564,6 +1721,7 @@ mod tests {
                 kind: LineInfoKind::Statement,
             },
             LineInfo {
+                marker: None,
                 offset: PdbInternalSectionOffset {
                     section: 0x1,
                     offset: 0xa08f,
@@ -1602,6 +1760,7 @@ mod tests {
             .expect("get line");
 
         let expected = Some(LineInfo {
+            marker: None,
             offset: PdbInternalSectionOffset {
                 section: 0x1,
                 offset: 0xa084,
@@ -1648,6 +1807,7 @@ mod tests {
             .expect("get line");
 
         let expected = Some(LineInfo {
+            marker: None,
             offset: PdbInternalSectionOffset {
                 section: 0x1,
                 offset: 0x8980,
@@ -1766,6 +1926,7 @@ mod tests {
 
         let expected = [
             LineInfo {
+                marker: None,
                 offset: PdbInternalSectionOffset {
                     section: 0x1,
                     offset: 0x015f,
@@ -1779,6 +1940,7 @@ mod tests {
                 kind: LineInfoKind::Statement,
             },
             LineInfo {
+                marker: None,
                 offset: PdbInternalSectionOffset {
                     section: 0x1,
                     offset: 0x0168,
@@ -1837,6 +1999,7 @@ mod tests {
 
         let expected = [
             LineInfo {
+                marker: None,
                 offset: PdbInternalSectionOffset {
                     section: 0x1,
                     offset: 0x0454_2b20,
@@ -1850,6 +2013,7 @@ mod tests {
                 kind: LineInfoKind::Statement,
             },
             LineInfo {
+                marker: None,
                 offset: PdbInternalSectionOffset {
                     section: 0x1,
                     offset: 0x0454_2b27,
@@ -1863,6 +2027,7 @@ mod tests {
                 kind: LineInfoKind::Statement,
             },
             LineInfo {
+                marker: None,
                 offset: PdbInternalSectionOffset {
                     section: 0x1,
                     offset: 0x0454_2b2b,
