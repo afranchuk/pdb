@@ -370,23 +370,11 @@ impl LineNumberHeader {
             });
         }
 
-        // It has been observed in some PDBs that this does not store a delta to start_line but
-        // actually just the truncated value of `end_line`. Therefore, prefer to use `end_line` and
-        // compute the deta from `end_line` and `start_line`, if needed.
-        let line_delta = self.flags & 0x7f00_0000 >> 24;
-
-        // The line_delta contains the lower 7 bits of the end line number. We take all higher bits
-        // from the start line and OR them with the lower delta bits. This combines to the full
-        // original end line number.
-        let high_start = start_line & !0x7f;
-        let mut end_line = high_start | line_delta;
-
-        // If the end line number is smaller than the start line, we have to assume an overflow.
-        // The end line will most likely be within 128 lines from the start line. Thus, we account
-        // for the overflow by adding 1 to the 8th bit.
-        if end_line < start_line {
-            end_line += 1 << 7;
-        }
+        // `deltaLineEnd` (bits 24 to 30) is the number of lines from the start line to the line
+        // where the statement ends, as `cvinfo.h` defines it. Zero means the statement ends on its
+        // start line. The start line is at most 24 bits wide, so the sum cannot overflow.
+        let line_delta = (self.flags >> 24) & 0x7f;
+        let end_line = start_line + line_delta;
 
         let kind = if self.flags & 0x8000_0000 != 0 {
             LineInfoKind::Statement
@@ -1432,6 +1420,90 @@ mod tests {
     fn test_line_number_header() {
         assert_eq!(mem::size_of::<LineNumberHeader>(), 8);
         assert_eq!(mem::align_of::<LineNumberHeader>(), 4);
+    }
+
+    fn parse_line_number(flags: u32) -> LineNumberEntry {
+        match (LineNumberHeader { offset: 0, flags }).parse() {
+            LineEntry::Number(entry) => entry,
+            LineEntry::Marker(_) => panic!("{:#010x} parsed as a marker", flags),
+        }
+    }
+
+    #[test]
+    fn test_line_number_header_end_line() {
+        // A statement on line 123 that ends on line 125 (`deltaLineEnd` = 2). This record is in
+        // `AmbrosiaLibCS.pdb` from the `microsoft.ambrosia.libcs` 2.0.0 package. Reading the
+        // field as the low bits of the end line instead would give 130.
+        let entry = parse_line_number(0x8200_007b);
+        assert_eq!(
+            (entry.start_line, entry.end_line, entry.kind),
+            (123, 125, LineInfoKind::Statement)
+        );
+
+        // A zero delta ends the statement on its start line.
+        let entry = parse_line_number(0x8000_0016);
+        assert_eq!((entry.start_line, entry.end_line), (22, 22));
+
+        // The largest delta, on an expression (`fStatement` clear).
+        let entry = parse_line_number(0x7f00_00c8);
+        assert_eq!(
+            (entry.start_line, entry.end_line, entry.kind),
+            (200, 327, LineInfoKind::Expression)
+        );
+
+        // A start line near the 24-bit limit with the largest delta: the end needs 25 bits.
+        let entry = parse_line_number(0x7fff_fffe);
+        assert_eq!(
+            (entry.start_line, entry.end_line),
+            (0x00ff_fffe, 0x0100_007d)
+        );
+    }
+
+    #[test]
+    fn test_line_number_header_marker_ignores_delta() {
+        // Both markers with `deltaLineEnd` = 2 are still markers.
+        let entry = (LineNumberHeader {
+            offset: 0,
+            flags: 0x82fe_efee,
+        })
+        .parse();
+        assert!(matches!(
+            entry,
+            LineEntry::Marker(LineMarkerEntry {
+                kind: LineMarkerKind::DoNotStepOnto,
+                ..
+            })
+        ));
+
+        let entry = (LineNumberHeader {
+            offset: 0,
+            flags: 0x82f0_0f00,
+        })
+        .parse();
+        assert!(matches!(
+            entry,
+            LineEntry::Marker(LineMarkerEntry {
+                kind: LineMarkerKind::DoNotStepInto,
+                ..
+            })
+        ));
+    }
+
+    #[test]
+    fn test_iter_lines_end_line() {
+        // `test_iter_lines`'s data with the second record's `deltaLineEnd` set to 2.
+        let data = &[
+            244, 0, 0, 0, 24, 0, 0, 0, 169, 49, 0, 0, 16, 1, 115, 121, 2, 198, 45, 116, 88, 98,
+            157, 13, 221, 82, 225, 34, 192, 51, 0, 0, 242, 0, 0, 0, 48, 0, 0, 0, 132, 160, 0, 0, 1,
+            0, 0, 0, 12, 0, 0, 0, 0, 0, 0, 0, 3, 0, 0, 0, 36, 0, 0, 0, 0, 0, 0, 0, 22, 0, 0, 128,
+            0, 0, 0, 0, 23, 0, 0, 130, 11, 0, 0, 0, 24, 0, 0, 128,
+        ];
+
+        let line_program = LineProgram::parse(data).expect("parse line program");
+        let lines: Vec<_> = line_program.lines().collect().expect("collect lines");
+        let spans: Vec<_> = lines.iter().map(|l| (l.line_start, l.line_end)).collect();
+
+        assert_eq!(spans, [(22, 22), (23, 25), (24, 24)]);
     }
 
     #[test]
