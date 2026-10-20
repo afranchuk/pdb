@@ -165,9 +165,25 @@ impl Default for LineInfoKind {
     }
 }
 
+/// A hint for debuggers that a compiler stores in place of a line number.
+///
+/// Compilers write two special line numbers: `0xfeefee` for code a debugger should not step onto,
+/// and `0xf00f00` for code it should not step into. Roslyn writes `0xfeefee` for every hidden
+/// sequence point, so .NET PDBs carry it for hidden code, including compiler-generated code. A
+/// C13 line record with one of these values is a [`LineInfo`] whose `marker` is `Some`.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum LineMarkerKind {
+    /// A debugger should not step onto this code (line number `0xfeefee`).
+    DoNotStepOnto,
+    /// A debugger should not step into this code (line number `0xf00f00`).
+    DoNotStepInto,
+}
+
 /// Mapping of a source code offset to a source file location.
 ///
-/// A line entry is always valid up to the subsequent entry.
+/// Within a lines subsection, an entry extends to the next entry; the last entry ends at the
+/// subsection's code end. An entry may carry a debugger hint instead of a line number; see
+/// [`LineInfo::marker`].
 #[derive(Clone, Debug, PartialEq)]
 pub struct LineInfo {
     /// Source code offset.
@@ -192,6 +208,14 @@ pub struct LineInfo {
     pub column_end: Option<u32>,
     /// Kind of this line information.
     pub kind: LineInfoKind,
+    /// The debugger hint this record carries instead of a line number, if any.
+    ///
+    /// When this is `Some`, `line_start` and `line_end` both hold the marker's raw value
+    /// (`0xfeefee` or `0xf00f00`) rather than a source line. For `0xfeefee`, that matches how
+    /// Roslyn and `System.Reflection.Metadata` represent hidden sequence points; `0xf00f00` is
+    /// represented the same way. `offset` and `length` cover the code the hint applies to, like
+    /// any other record.
+    pub marker: Option<LineMarkerKind>,
 }
 
 impl LineInfo {
